@@ -1,0 +1,30 @@
+# Power Apps
+*.msapp
+canvas-app/out/
+canvas-app/*.zip
+
+# Power Automate / soluciones exportadas
+*.zip
+!power-automate/**/*.template.zip
+
+# PowerShell
+*.ps1xml
+PnP.PowerShell*/
+
+# Credenciales y configuracion local  -- NUNCA versionar
+*.secret
+*.pfx
+*.cer
+appsettings.local.json
+config.local.ps1
+.env
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
