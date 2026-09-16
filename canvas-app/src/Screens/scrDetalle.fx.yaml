@@ -1,0 +1,484 @@
+# Ficha del contrato: cabecera, barra de acciones y seis pestañas.
+# Fórmulas comentadas en canvas-app/formulas/02-detalle-y-edicion.md
+Screens:
+  scrDetalle:
+    Properties:
+      Fill: =gblTema.Fondo
+      OnVisible: |-
+        =Set(gblContrato, LookUp(Contratos, ID = gblContrato.ID));
+        UpdateContext({locPestana: "General", locEnviando: false, locConfirmarTerminar: false});
+        Concurrent(
+            ClearCollect(colDocumentos, Filter(DocumentosContratos, Contrato.Id = gblContrato.ID)),
+            ClearCollect(colAprobaciones, Filter(Aprobaciones, Contrato.Id = gblContrato.ID)),
+            ClearCollect(colMovimientos, Filter(MovimientosCustodia, Contrato.Id = gblContrato.ID)),
+            ClearCollect(colAdendas, Filter(Adendas, Contrato.Id = gblContrato.ID))
+        );
+        Set(gblMontoVigente,
+            gblContrato.Monto + Sum(Filter(colAdendas, Estado.Value = "Aprobada"), MontoDelta))
+    Children:
+      - recCabeceraD:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Primario
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =108
+      - icoVolverD:
+          Control: Classic/Icon
+          Properties:
+            Icon: =Icon.Back
+            X: =16
+            Y: =16
+            Width: =32
+            Height: =32
+            Color: =gblTema.TextoClaro
+            OnSelect: =Navigate(scrBandeja, ScreenTransition.UnCover)
+      - lblCodigoD:
+          Control: Label
+          Properties:
+            Text: =Coalesce(gblContrato.Title, "(sin código)")
+            X: =60
+            Y: =14
+            Width: =400
+            Height: =22
+            Color: =gblTema.PrimarioSuave
+            Size: =gblTema.FuenteMenor
+      - lblNombreD:
+          Control: Label
+          Properties:
+            Text: =gblContrato.NombreContrato
+            X: =60
+            Y: =34
+            Width: =Parent.Width - 400
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteTitulo
+            FontWeight: =FontWeight.Semibold
+      - lblContraparteD:
+          Control: Label
+          Properties:
+            Text: |-
+              =gblContrato.Contraparte & " · " & gblContrato.TipoContrato.Value
+            X: =60
+            Y: =68
+            Width: =Parent.Width - 400
+            Height: =24
+            Color: =gblTema.PrimarioSuave
+            Size: =gblTema.FuenteBase
+      - lblEstadoD:
+          Control: Label
+          Properties:
+            Text: =gblContrato.Estado.Value
+            X: =Parent.Width - 280
+            Y: =30
+            Width: =260
+            Height: =28
+            Align: =Align.Right
+            Color: =gblTema.TextoClaro
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+      - lblAvanceAprobacion:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Nivel " & gblContrato.NivelAprobacionActual & " de " & gblContrato.NivelAprobacionRequerido
+            X: =Parent.Width - 280
+            Y: =60
+            Width: =260
+            Height: =24
+            Align: =Align.Right
+            Color: =gblTema.PrimarioSuave
+            Size: =gblTema.FuenteMenor
+            Visible: =gblContrato.Estado.Value = "En aprobacion"
+
+      # --- Barra de acciones -------------------------------------------------
+      - btnEditar:
+          Control: Button
+          Properties:
+            Text: ="Editar"
+            X: =24
+            Y: =124
+            Width: =120
+            Height: =36
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.Primario
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: |-
+              =gblContrato.Estado.Value in ["Borrador", "Rechazado", "En revision legal"]
+            OnSelect: |-
+              =Set(gblModoEdicion, "Editar"); Navigate(scrEditar, ScreenTransition.Cover)
+      - btnEnviarAprobacion:
+          Control: Button
+          Properties:
+            Text: ="Enviar a aprobación"
+            X: =152
+            Y: =124
+            Width: =200
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =gblContrato.Estado.Value in ["Borrador", "Rechazado"]
+            DisplayMode: |-
+              =If(IsBlank(gblContrato.TipoContrato)
+                   || IsBlank(gblContrato.AreaSolicitante)
+                   || IsBlank(gblContrato.FechaInicio)
+                   || (!gblContrato.SinMontoDeterminado && IsBlank(gblContrato.Monto))
+                   || CountRows(Filter(colDocumentos, EsPrincipal = true)) = 0,
+                  DisplayMode.Disabled, DisplayMode.Edit)
+            Tooltip: |-
+              =If(CountRows(Filter(colDocumentos, EsPrincipal = true)) = 0,
+                  "Falta subir el documento del contrato y marcarlo como principal",
+                  IsBlank(gblContrato.Monto) && !gblContrato.SinMontoDeterminado,
+                  "Falta indicar el monto, o marcar el contrato como de monto no determinado",
+                  "Enviar el contrato al circuito de aprobación")
+            OnSelect: |-
+              =UpdateContext({locEnviando: true});
+              With({_resp: 'Contratos-SolicitudDeAprobacion'.Run(gblContrato.ID)},
+                  If(_resp.Resultado = "Enviado",
+                     Notify(_resp.Mensaje, NotificationType.Success, 4000),
+                     Notify(_resp.Mensaje, NotificationType.Error, 8000)));
+              Set(gblContrato, LookUp(Contratos, ID = gblContrato.ID));
+              ClearCollect(colAprobaciones, Filter(Aprobaciones, Contrato.Id = gblContrato.ID));
+              UpdateContext({locEnviando: false})
+      - btnVistoBuenoLegal:
+          Control: Button
+          Properties:
+            Text: ="Visto bueno legal"
+            X: =360
+            Y: =124
+            Width: =180
+            Height: =36
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.Primario
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: =gblEsLegal && gblContrato.Estado.Value = "En revision legal"
+            OnSelect: |-
+              =Patch(Contratos, gblContrato, {Estado: {Value: "Borrador"}});
+              Patch(Bitacora, Defaults(Bitacora), {
+                  Title: gblContrato.Title & " - Visto bueno legal",
+                  Contrato: {Id: gblContrato.ID, Value: gblContrato.Title},
+                  Accion: "Visto bueno legal", Usuario: gblUsuario, Fecha: Now(),
+                  Detalle: "Legal dio conformidad. El contrato queda listo para enviarse a aprobación."});
+              Set(gblContrato, LookUp(Contratos, ID = gblContrato.ID));
+              Notify("Visto bueno registrado.", NotificationType.Success)
+      - btnCustodia:
+          Control: Button
+          Properties:
+            Text: ="Custodia del original"
+            X: =Parent.Width - 400
+            Y: =124
+            Width: =190
+            Height: =36
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.Primario
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            OnSelect: =Navigate(scrCustodia, ScreenTransition.Cover)
+      - btnRenovar:
+          Control: Button
+          Properties:
+            Text: ="Renovar"
+            X: =Parent.Width - 200
+            Y: =124
+            Width: =120
+            Height: =36
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.Primario
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: =gblContrato.Estado.Value in ["Vigente", "Por vencer", "Vencido"]
+            OnSelect: |-
+              =With({_nuevo: Patch(Contratos, Defaults(Contratos), {
+                      NombreContrato: gblContrato.NombreContrato & " (renovación)",
+                      TipoContrato: gblContrato.TipoContrato,
+                      ObjetoContrato: gblContrato.ObjetoContrato,
+                      Contraparte: gblContrato.Contraparte,
+                      ContraparteRUC: gblContrato.ContraparteRUC,
+                      TipoContraparte: gblContrato.TipoContraparte,
+                      ContraparteContacto: gblContrato.ContraparteContacto,
+                      ContraparteCorreo: gblContrato.ContraparteCorreo,
+                      AreaSolicitante: gblContrato.AreaSolicitante,
+                      Solicitante: gblUsuario,
+                      ResponsableContrato: gblContrato.ResponsableContrato,
+                      Moneda: gblContrato.Moneda, Monto: gblContrato.Monto,
+                      FechaInicio: DateAdd(gblContrato.FechaFin, 1, TimeUnit.Days),
+                      FechaFin: DateAdd(gblContrato.FechaFin, 1, TimeUnit.Years),
+                      DiasPreaviso: gblContrato.DiasPreaviso,
+                      Clasificacion: gblContrato.Clasificacion,
+                      Estado: {Value: "Borrador"},
+                      EstadoCustodia: {Value: "Pendiente de recepcion"},
+                      ContratoPadre: {Id: gblContrato.ID, Value: gblContrato.Title}})},
+                  Patch(Contratos, gblContrato, {Estado: {Value: "Renovado"}});
+                  Set(gblContrato, _nuevo);
+                  Set(gblModoEdicion, "Editar");
+                  Notify("Contrato de renovación creado en borrador. Revisa las fechas y el monto.", NotificationType.Success, 6000);
+                  Navigate(scrEditar, ScreenTransition.Cover))
+      - lblEnviando:
+          Control: Label
+          Properties:
+            Text: ="Enviando a aprobación…"
+            X: =152
+            Y: =164
+            Width: =300
+            Height: =24
+            Color: =gblTema.Info
+            Size: =gblTema.FuenteMenor
+            Visible: =locEnviando
+
+      # --- Pestañas ----------------------------------------------------------
+      - galPestanas:
+          Control: Gallery
+          Variant: Horizontal
+          Properties:
+            X: =24
+            Y: =176
+            Width: =Parent.Width - 48
+            Height: =44
+            TemplateSize: =150
+            ShowScrollbar: =false
+            Items: |-
+              =Table({Clave: "General"}, {Clave: "Económico"}, {Clave: "Documentos"},
+                     {Clave: "Aprobaciones"}, {Clave: "Custodia"}, {Clave: "Adendas"})
+          Children:
+            - lblPestana:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Clave
+                  X: =0
+                  Y: =0
+                  Width: =Parent.TemplateWidth
+                  Height: =40
+                  Align: =Align.Center
+                  Size: =gblTema.FuenteBase
+                  FontWeight: |-
+                    =If(locPestana = ThisItem.Clave, FontWeight.Semibold, FontWeight.Normal)
+                  Color: |-
+                    =If(locPestana = ThisItem.Clave, gblTema.Primario, gblTema.TextoSuave)
+                  OnSelect: |-
+                    =UpdateContext({locPestana: ThisItem.Clave})
+            - recSubrayado:
+                Control: Rectangle
+                Properties:
+                  X: =0
+                  Y: =40
+                  Width: =Parent.TemplateWidth
+                  Height: =3
+                  Fill: =gblTema.Primario
+                  Visible: =locPestana = ThisItem.Clave
+
+      # --- Pestaña Documentos -------------------------------------------------
+      - galDocumentos:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =236
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 268
+            TemplateSize: =64
+            Visible: =locPestana = "Documentos"
+            Items: =SortByColumns(colDocumentos, "FechaDocumento", SortOrder.Descending)
+          Children:
+            - lblDocNombre:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.'Nombre del archivo con extensión'
+                  X: =12
+                  Y: =8
+                  Width: =Parent.TemplateWidth * 0.5
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblDocTipo:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =ThisItem.TipoDocumento.Value &
+                     If(IsBlank(ThisItem.VersionDocumento), "", " · " & ThisItem.VersionDocumento)
+                  X: =12
+                  Y: =32
+                  Width: =Parent.TemplateWidth * 0.5
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblDocPrincipal:
+                Control: Label
+                Properties:
+                  Text: ="PRINCIPAL"
+                  X: =Parent.TemplateWidth * 0.55
+                  Y: =20
+                  Width: =100
+                  Height: =24
+                  Color: =gblTema.Exito
+                  Size: =gblTema.FuenteMenor
+                  FontWeight: =FontWeight.Bold
+                  Visible: =ThisItem.EsPrincipal
+            - btnMarcarPrincipal:
+                Control: Button
+                Properties:
+                  Text: ="Marcar principal"
+                  X: =Parent.TemplateWidth - 300
+                  Y: =16
+                  Width: =150
+                  Height: =32
+                  Fill: =gblTema.Tarjeta
+                  Color: =gblTema.Primario
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+                  BorderRadius: =gblTema.Radio
+                  Visible: =!ThisItem.EsPrincipal
+                  OnSelect: |-
+                    =ForAll(Filter(colDocumentos, EsPrincipal = true, ID <> ThisItem.ID) As _otro,
+                        Patch(DocumentosContratos, LookUp(DocumentosContratos, ID = _otro.ID), {EsPrincipal: false}));
+                    Patch(DocumentosContratos, LookUp(DocumentosContratos, ID = ThisItem.ID), {EsPrincipal: true});
+                    ClearCollect(colDocumentos, Filter(DocumentosContratos, Contrato.Id = gblContrato.ID));
+                    Notify("Documento marcado como principal. Es el que se enviará a firma.", NotificationType.Success)
+            - btnAbrirDoc:
+                Control: Button
+                Properties:
+                  Text: ="Abrir"
+                  X: =Parent.TemplateWidth - 140
+                  Y: =16
+                  Width: =120
+                  Height: =32
+                  Fill: =gblTema.Tarjeta
+                  Color: =gblTema.Primario
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+                  BorderRadius: =gblTema.Radio
+                  OnSelect: =Launch(ThisItem.'Vínculo al elemento')
+
+      # --- Pestaña Aprobaciones ------------------------------------------------
+      - galAprobacionesD:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =236
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 268
+            TemplateSize: =80
+            Visible: =locPestana = "Aprobaciones"
+            Items: |-
+              =SortByColumns(SortByColumns(colAprobaciones, "Nivel", SortOrder.Ascending),
+                             "Ciclo", SortOrder.Descending)
+          Children:
+            - lblAprNivel:
+                Control: Label
+                Properties:
+                  Text: ="Nivel " & ThisItem.Nivel & " · " & ThisItem.RolAprobador
+                  X: =12
+                  Y: =8
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblAprQuien:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =Coalesce(ThisItem.ResueltoPor.DisplayName,
+                              ThisItem.AprobadorAsignado.DisplayName, "(sin asignar)")
+                  X: =12
+                  Y: =34
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblAprDecision:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Decision.Value
+                  X: =Parent.TemplateWidth * 0.34
+                  Y: =20
+                  Width: =140
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+                  Color: |-
+                    =Switch(ThisItem.Decision.Value,
+                        "Aprobado", gblTema.Exito,
+                        "Rechazado", gblTema.Error,
+                        "Pendiente", gblTema.Advertencia,
+                        gblTema.TextoSuave)
+            - lblAprFecha:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =If(IsBlank(ThisItem.FechaDecision),
+                        "Pendiente desde " & Text(ThisItem.FechaSolicitud, "dd/mm/yyyy hh:mm"),
+                        Text(ThisItem.FechaDecision, "dd/mm/yyyy hh:mm") & " (" & Text(ThisItem.HorasTranscurridas, "#,##0.0") & " h)")
+                  X: =Parent.TemplateWidth * 0.5
+                  Y: =20
+                  Width: =Parent.TemplateWidth * 0.22
+                  Height: =24
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblAprComentarios:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Comentarios
+                  X: =Parent.TemplateWidth * 0.73
+                  Y: =12
+                  Width: =Parent.TemplateWidth * 0.25
+                  Height: =56
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+
+      # --- Pestaña Adendas -----------------------------------------------------
+      - galAdendasD:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =236
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 268
+            TemplateSize: =72
+            Visible: =locPestana = "Adendas"
+            Items: =SortByColumns(colAdendas, "NumeroAdenda", SortOrder.Descending)
+          Children:
+            - lblAdCodigo:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Title & " · " & ThisItem.TipoAdenda.Value
+                  X: =12
+                  Y: =10
+                  Width: =Parent.TemplateWidth * 0.5
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblAdDetalle:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =Text(ThisItem.FechaAdenda, "dd/mm/yyyy") &
+                     If(IsBlank(ThisItem.MontoDelta), "",
+                        " · variación " & Text(ThisItem.MontoDelta, "#,##0.00")) &
+                     If(IsBlank(ThisItem.NuevaFechaFin), "",
+                        " · nueva fecha fin " & Text(ThisItem.NuevaFechaFin, "dd/mm/yyyy"))
+                  X: =12
+                  Y: =36
+                  Width: =Parent.TemplateWidth * 0.7
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblAdEstado:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Estado.Value
+                  X: =Parent.TemplateWidth - 180
+                  Y: =22
+                  Width: =160
+                  Height: =24
+                  Align: =Align.Right
+                  Size: =gblTema.FuenteMenor
+                  FontWeight: =FontWeight.Semibold

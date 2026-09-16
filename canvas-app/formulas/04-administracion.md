@@ -1,0 +1,301 @@
+# scrAdmin — administración
+
+Solo visible para `gblEsAdmin`. Tres secciones: **matriz de aprobación**,
+**parámetros** y **áreas**. Es la pantalla que permite cambiar cómo se aprueba
+sin tocar Power Automate.
+
+## scrAdmin.OnVisible
+
+```powerfx
+// Puerta de entrada. La barrera real está en los permisos de SharePoint
+// (ver docs/05-seguridad-permisos.md); esto solo evita mostrar una pantalla
+// que el usuario no podría guardar de todos modos.
+If(!gblEsAdmin,
+    Notify("No tienes acceso a la administración del sistema.", NotificationType.Error);
+    Back()
+);
+
+Concurrent(
+    ClearCollect(colMatriz,
+        SortByColumns(
+            SortByColumns(MatrizAprobacion, "Nivel", SortOrder.Ascending),
+            "MontoDesdePEN", SortOrder.Ascending
+        )
+    ),
+    ClearCollect(colParametros, Parametros),
+    ClearCollect(colAreasAdmin, Areas)
+);
+
+UpdateContext({ locSeccion: "Matriz", locRegla: Blank() })
+```
+
+---
+
+## Sección Matriz de aprobación
+
+### galMatriz.Items
+
+```powerfx
+Filter(colMatriz,
+    cmbFiltroTipo.Selected.Value = "(Todos)"
+        || TipoContrato.Value = cmbFiltroTipo.Selected.Value
+)
+```
+
+> Aquí sí se puede mezclar la condición constante con la de fila: `colMatriz` es
+> una colección **en memoria**, no un origen delegado. La matriz tiene decenas de
+> filas, no miles.
+
+| Control | Propiedad | Fórmula |
+|---|---|---|
+| `lblRegla` | `Text` | `ThisItem.Title` |
+| `lblTramo` | `Text` | `Text(ThisItem.MontoDesdePEN, "#,##0") & " – " & If(ThisItem.MontoHastaPEN >= 999999999, "sin tope", Text(ThisItem.MontoHastaPEN, "#,##0"))` |
+| `lblNivelRol` | `Text` | `"N" & ThisItem.Nivel & " · " & ThisItem.RolAprobador.Value` |
+| `lblAprobador` | `Text` | `Coalesce(ThisItem.AprobadorUsuario.DisplayName, ThisItem.AprobadorGrupo, If(ThisItem.RolAprobador.Value in ["Jefe de area", "Gerente de area"], "(se resuelve por el área del contrato)", "⚠ sin aprobador"))` |
+| `lblAprobador` | `Color` | `If(IsBlank(ThisItem.AprobadorUsuario.DisplayName) && IsBlank(ThisItem.AprobadorGrupo) && !(ThisItem.RolAprobador.Value in ["Jefe de area", "Gerente de area"]), gblTema.Error, gblTema.Texto)` |
+| `tglActivo` | `Default` | `ThisItem.Activo` |
+| `tglActivo` | `OnChange` | `Patch(MatrizAprobacion, LookUp(MatrizAprobacion, ID = ThisItem.ID), { Activo: tglActivo.Value })` |
+
+### Aviso de reglas incompletas
+
+Una regla activa cuyo aprobador no se puede resolver **bloquea** el workflow al
+llegar a ese nivel. Conviene verlo aquí y no descubrirlo en un contrato detenido.
+
+```powerfx
+// lblAvisoIncompletas.Text
+With(
+    {
+        _malas: Filter(colMatriz,
+            Activo = true,
+            IsBlank(AprobadorUsuario.Email),
+            IsBlank(AprobadorGrupo),
+            !(RolAprobador.Value in ["Jefe de area", "Gerente de area"])
+        )
+    },
+    If(CountRows(_malas) = 0,
+       "",
+       CountRows(_malas) & " regla(s) activa(s) sin aprobador asignado. " &
+       "Un contrato que llegue a ese nivel se detendrá y se notificará al administrador."
+    )
+)
+
+// lblAvisoIncompletas.Visible
+!IsBlank(lblAvisoIncompletas.Text)
+```
+
+Lo mismo para las áreas sin responsable, que rompen los roles *Jefe* y *Gerente*:
+
+```powerfx
+// lblAvisoAreas.Text
+With(
+    { _sin: Filter(colAreasAdmin, Activo = true, IsBlank(Responsable.Email)) },
+    If(CountRows(_sin) = 0, "",
+       CountRows(_sin) & " área(s) activa(s) sin responsable: " &
+       Concat(_sin, Title, ", ") & ". Los niveles 'Jefe de área' no se podrán resolver.")
+)
+```
+
+### Simulador de la ruta de aprobación
+
+Responde «¿quién aprueba un contrato así?» sin tener que crear uno. Reproduce en
+Power Fx la misma resolución que hace el flujo 01: filtra por tramo y tipo, y en
+cada nivel la regla específica gana sobre la genérica.
+
+```powerfx
+// btnSimular.OnSelect
+With(
+    {
+        _monto: Coalesce(Value(txtSimMonto.Text), 0),
+        _tipo:  cmbSimTipo.Selected.Value,
+        _area:  cmbSimArea.Selected
+    },
+    ClearCollect(colSimAplicables,
+        Filter(colMatriz,
+            Activo = true,
+            MontoDesdePEN <= _monto,
+            MontoHastaPEN > _monto,
+            TipoContrato.Value = _tipo || TipoContrato.Value = "Todos"
+        )
+    );
+
+    // Un registro por nivel: la regla del tipo desplaza a la genérica.
+    ClearCollect(colSimRuta,
+        ForAll(
+            Distinct(colSimAplicables, Nivel) As _n,
+            With(
+                {
+                    _especifica: First(Filter(colSimAplicables,
+                                       Nivel = _n.Value, TipoContrato.Value = _tipo)),
+                    _generica:   First(Filter(colSimAplicables,
+                                       Nivel = _n.Value, TipoContrato.Value = "Todos"))
+                },
+                With(
+                    { _r: If(IsBlank(_especifica.ID), _generica, _especifica) },
+                    {
+                        Nivel: _n.Value,
+                        Rol:   _r.RolAprobador.Value,
+                        Aprobador:
+                            Switch(_r.RolAprobador.Value,
+                                "Jefe de area",    Coalesce(_area.Responsable.DisplayName, "⚠ área sin responsable"),
+                                "Gerente de area", Coalesce(_area.Gerente.DisplayName,     "⚠ área sin gerente"),
+                                Coalesce(_r.AprobadorUsuario.DisplayName, _r.AprobadorGrupo, "⚠ sin aprobador")
+                            ),
+                        SLA: _r.SLAHoras
+                    }
+                )
+            )
+        )
+    )
+);
+
+UpdateContext({ locSimulado: true })
+```
+
+`galSimulacion.Items`: `SortByColumns(colSimRuta, "Nivel", SortOrder.Ascending)`
+
+| Control | Propiedad | Fórmula |
+|---|---|---|
+| `lblSimNivel` | `Text` | `"Nivel " & ThisItem.Nivel` |
+| `lblSimRol` | `Text` | `ThisItem.Rol` |
+| `lblSimAprobador` | `Text` | `ThisItem.Aprobador` |
+| `lblSimAprobador` | `Color` | `If(StartsWith(ThisItem.Aprobador, "⚠"), gblTema.Error, gblTema.Texto)` |
+| `lblSimSla` | `Text` | `ThisItem.SLA & " h"` |
+
+Resumen:
+
+```powerfx
+// lblSimResumen.Text
+If(
+    CountRows(colSimRuta) = 0,
+    "⚠ Ningún tramo de la matriz cubre ese monto para ese tipo de contrato. " &
+    "Un contrato así quedaría detenido.",
+    "Se requieren " & CountRows(colSimRuta) & " nivel(es) de aprobación. " &
+    "SLA total estimado: " & Sum(colSimRuta, SLA) & " horas."
+)
+```
+
+> **Cuidar la paridad.** Si algún día se cambia la lógica de resolución del flujo
+> 01, hay que cambiar también este simulador. Un simulador que miente es peor que
+> no tenerlo.
+
+### Alta y edición de reglas
+
+`frmRegla.DataSource`: `MatrizAprobacion` · `frmRegla.Item`: `locRegla`
+
+```powerfx
+// btnNuevaRegla.OnSelect
+UpdateContext({ locRegla: Blank() });
+NewForm(frmRegla);
+UpdateContext({ locPanelRegla: true })
+
+// galMatriz elemento .OnSelect
+UpdateContext({ locRegla: ThisItem });
+EditForm(frmRegla);
+UpdateContext({ locPanelRegla: true })
+```
+
+Validación antes de guardar:
+
+```powerfx
+// btnGuardarRegla.OnSelect
+With(
+    {
+        _desde: Value(DataCardValue_MontoDesde.Text),
+        _hasta: Value(DataCardValue_MontoHasta.Text),
+        _rol:   DataCardValue_Rol.Selected.Value,
+        _usr:   DataCardValue_AprobadorUsuario.Selected,
+        _grp:   Trim(DataCardValue_AprobadorGrupo.Text)
+    },
+    UpdateContext({
+        locErrorRegla:
+            If(
+                _hasta <= _desde,
+                "El monto 'hasta' debe ser mayor que el monto 'desde'.",
+
+                !(_rol in ["Jefe de area", "Gerente de area"])
+                    && IsBlank(_usr) && IsBlank(_grp),
+                "Este rol no se resuelve solo: indica un aprobador (usuario o grupo).",
+
+                !IsBlank(_grp) && !IsMatch(_grp, Match.Email),
+                "El grupo debe ser una dirección de correo válida.",
+
+                ""
+            )
+    })
+);
+
+If(IsBlank(locErrorRegla), SubmitForm(frmRegla))
+```
+
+```powerfx
+// frmRegla.OnSuccess
+ClearCollect(colMatriz,
+    SortByColumns(
+        SortByColumns(MatrizAprobacion, "Nivel", SortOrder.Ascending),
+        "MontoDesdePEN", SortOrder.Ascending
+    )
+);
+UpdateContext({ locPanelRegla: false });
+Notify("Regla guardada. Aplica a los contratos que se envíen a aprobación desde ahora.",
+       NotificationType.Success, 5000)
+```
+
+> Cambiar la matriz **no altera** los contratos que ya están circulando: sus
+> niveles se resolvieron al enviarse. Es intencional — la ruta de aprobación de
+> un contrato no debe moverse bajo los pies de quienes ya la están recorriendo.
+
+---
+
+## Sección Parámetros
+
+```powerfx
+// galParametros.Items
+SortByColumns(colParametros, "Title", SortOrder.Ascending)
+```
+
+| Control | Propiedad | Fórmula |
+|---|---|---|
+| `lblClave` | `Text` | `ThisItem.Title` |
+| `lblDescripcion` | `Text` | `ThisItem.Descripcion` |
+| `txtValor` | `Default` | `ThisItem.Valor` |
+| `btnGuardarParam` | `DisplayMode` | `If(txtValor.Text = ThisItem.Valor, DisplayMode.Disabled, DisplayMode.Edit)` |
+
+```powerfx
+// btnGuardarParam.OnSelect
+Patch(Parametros, LookUp(Parametros, ID = ThisItem.ID), { Valor: Trim(txtValor.Text) });
+ClearCollect(colParametros, Parametros);
+
+// Los tipos de cambio y el interruptor de DocuSign están en variables globales
+// cargadas en OnStart: hay que refrescarlas o la sesión seguiría con el valor viejo.
+Set(gblTCUSD, Coalesce(Value(LookUp(colParametros, Title = "TC_USD", Valor), "en-US"), 1));
+Set(gblTCEUR, Coalesce(Value(LookUp(colParametros, Title = "TC_EUR", Valor), "en-US"), 1));
+Set(gblDocuSignHabilitado,
+    Lower(Coalesce(LookUp(colParametros, Title = "DOCUSIGN_HABILITADO", Valor), "false")) = "true");
+
+Notify("Parámetro actualizado.", NotificationType.Success)
+```
+
+> Los parámetros que leen los **flujos** (correos, hitos de alerta, prefijo) se
+> leen en cada ejecución: el cambio surte efecto de inmediato. Los que lee la
+> **app** viven en variables de sesión, y los demás usuarios los verán al volver
+> a abrirla.
+
+---
+
+## Sección Áreas
+
+```powerfx
+// galAreas.Items
+SortByColumns(colAreasAdmin, "Title", SortOrder.Ascending)
+```
+
+| Control | Propiedad | Fórmula |
+|---|---|---|
+| `lblArea` | `Text` | `ThisItem.Title & " (" & ThisItem.CodigoArea & ")"` |
+| `lblResponsable` | `Text` | `Coalesce(ThisItem.Responsable.DisplayName, "⚠ sin responsable")` |
+| `lblGerente` | `Text` | `Coalesce(ThisItem.Gerente.DisplayName, "⚠ sin gerente")` |
+| `cmbResponsable` | `OnChange` | `Patch(Areas, LookUp(Areas, ID = ThisItem.ID), { Responsable: cmbResponsable.Selected }); ClearCollect(colAreasAdmin, Areas)` |
+| `cmbGerente` | `OnChange` | `Patch(Areas, LookUp(Areas, ID = ThisItem.ID), { Gerente: cmbGerente.Selected }); ClearCollect(colAreasAdmin, Areas)` |
+
+`cmbResponsable.Items` / `cmbGerente.Items`:
+`Office365Users.SearchUser({searchTerm: Self.SearchText, top: 20})`

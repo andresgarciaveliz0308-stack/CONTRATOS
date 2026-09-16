@@ -1,0 +1,123 @@
+# Registro y edición del contrato.
+#
+# NOTA: las tarjetas de datos (DataCard) de un formulario de SharePoint las
+# genera Power Apps Studio al elegir los campos en el panel de propiedades del
+# formulario. Aquí se declara el formulario y la lógica que lo rodea; los
+# valores predeterminados, la visibilidad condicional de cada tarjeta y las
+# validaciones están en canvas-app/formulas/02-detalle-y-edicion.md.
+Screens:
+  scrEditar:
+    Properties:
+      Fill: =gblTema.Fondo
+      OnVisible: |-
+        =If(gblModoEdicion = "Nuevo", NewForm(frmContrato), EditForm(frmContrato));
+        UpdateContext({locError: ""})
+    Children:
+      - recCabeceraE:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Primario
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =64
+      - lblTituloE:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(gblModoEdicion = "Nuevo", "Registrar contrato", "Editar contrato")
+            X: =24
+            Y: =16
+            Width: =400
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteTitulo
+            FontWeight: =FontWeight.Semibold
+      - btnCancelar:
+          Control: Button
+          Properties:
+            Text: ="Cancelar"
+            X: =Parent.Width - 300
+            Y: =14
+            Width: =130
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderColor: =gblTema.TextoClaro
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            OnSelect: |-
+              =ResetForm(frmContrato);
+              If(gblModoEdicion = "Nuevo",
+                 Navigate(scrBandeja, ScreenTransition.UnCover),
+                 Navigate(scrDetalle, ScreenTransition.UnCover))
+      - btnGuardar:
+          Control: Button
+          Properties:
+            Text: ="Guardar"
+            X: =Parent.Width - 160
+            Y: =14
+            Width: =136
+            Height: =36
+            Fill: =gblTema.TextoClaro
+            Color: =gblTema.Primario
+            BorderRadius: =gblTema.Radio
+            OnSelect: |-
+              =UpdateContext({locError: ""});
+              With({
+                  _inicio: DataCardValue_FechaInicio.SelectedDate,
+                  _fin: DataCardValue_FechaFin.SelectedDate,
+                  _indef: DataCardValue_VigenciaIndefinida.Value,
+                  _correo: Trim(DataCardValue_ContraparteCorreo.Text),
+                  _monto: Value(DataCardValue_Monto.Text),
+                  _sinMonto: DataCardValue_SinMonto.Value},
+                  UpdateContext({locError:
+                      If(!_indef && IsBlank(_fin),
+                         "Indica la fecha de fin, o marca el contrato como de vigencia indefinida.",
+                         !_indef && _fin <= _inicio,
+                         "La fecha de fin debe ser posterior a la de inicio.",
+                         !_sinMonto && (IsBlank(_monto) || _monto <= 0),
+                         "El monto debe ser mayor que cero, o marca 'Monto no determinado'.",
+                         gblDocuSignHabilitado && !IsBlank(_correo) && !IsMatch(_correo, Match.Email),
+                         "El correo del firmante no tiene un formato válido.",
+                         gblDocuSignHabilitado && IsBlank(_correo),
+                         "Con la firma electrónica activa, el correo del firmante es obligatorio.",
+                         DataCardValue_TieneGarantia.Value && IsBlank(DataCardValue_VencimientoGarantia.SelectedDate),
+                         "Indica la fecha de vencimiento de la garantía.",
+                         "")}));
+              If(IsBlank(locError), SubmitForm(frmContrato))
+      - lblError:
+          Control: Label
+          Properties:
+            Text: =locError
+            X: =24
+            Y: =76
+            Width: =Parent.Width - 48
+            Height: =32
+            Color: =gblTema.Error
+            Size: =gblTema.FuenteBase
+            Visible: =!IsBlank(locError)
+      - frmContrato:
+          Control: Form
+          Properties:
+            DataSource: =Contratos
+            Item: =gblContrato
+            X: =24
+            Y: =116
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 148
+            Columns: =2
+            OnSuccess: |-
+              =Set(gblContrato, frmContrato.LastSubmit);
+              If(gblModoEdicion = "Nuevo",
+                 Notify("Contrato registrado. El código se asignará en unos segundos.", NotificationType.Success, 5000),
+                 Notify("Cambios guardados.", NotificationType.Success));
+              Patch(Bitacora, Defaults(Bitacora), {
+                  Title: Coalesce(gblContrato.Title, "Nuevo") & " - " & gblModoEdicion,
+                  Contrato: {Id: gblContrato.ID, Value: Coalesce(gblContrato.Title, "")},
+                  Accion: If(gblModoEdicion = "Nuevo", "Creación", "Modificación"),
+                  Usuario: gblUsuario, Fecha: Now(),
+                  Detalle: "Registro guardado desde la aplicación."});
+              Navigate(scrDetalle, ScreenTransition.UnCover)
+            OnFailure: |-
+              =Notify("No se pudo guardar: " & frmContrato.Error, NotificationType.Error, 8000)

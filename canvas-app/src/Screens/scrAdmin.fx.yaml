@@ -1,0 +1,461 @@
+# Administración: matriz de aprobación, parámetros y áreas.
+# Incluye el simulador de ruta de aprobación, que reproduce en Power Fx la misma
+# resolución que hace el flujo 01.
+# Fórmulas comentadas en canvas-app/formulas/04-administracion.md
+Screens:
+  scrAdmin:
+    Properties:
+      Fill: =gblTema.Fondo
+      OnVisible: |-
+        =If(!gblEsAdmin,
+            Notify("No tienes acceso a la administración del sistema.", NotificationType.Error);
+            Back());
+        Concurrent(
+            ClearCollect(colMatriz,
+                SortByColumns(SortByColumns(MatrizAprobacion, "Nivel", SortOrder.Ascending),
+                              "MontoDesdePEN", SortOrder.Ascending)),
+            ClearCollect(colParametros, Parametros),
+            ClearCollect(colAreasAdmin, Areas)
+        );
+        UpdateContext({locSeccion: "Matriz", locSimulado: false})
+    Children:
+      - recCabeceraAd:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Primario
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =64
+      - icoVolverAd:
+          Control: Classic/Icon
+          Properties:
+            Icon: =Icon.Back
+            X: =16
+            Y: =16
+            Width: =32
+            Height: =32
+            Color: =gblTema.TextoClaro
+            OnSelect: =Navigate(scrInicio, ScreenTransition.UnCover)
+      - lblTituloAd:
+          Control: Label
+          Properties:
+            Text: ="Administración"
+            X: =60
+            Y: =16
+            Width: =300
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteTitulo
+            FontWeight: =FontWeight.Semibold
+      - galSecciones:
+          Control: Gallery
+          Variant: Horizontal
+          Properties:
+            X: =24
+            Y: =76
+            Width: =540
+            Height: =44
+            TemplateSize: =170
+            ShowScrollbar: =false
+            Items: |-
+              =Table({Clave: "Matriz"}, {Clave: "Parámetros"}, {Clave: "Áreas"})
+          Children:
+            - lblSeccion:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Clave
+                  X: =0
+                  Y: =0
+                  Width: =Parent.TemplateWidth
+                  Height: =40
+                  Align: =Align.Center
+                  Size: =gblTema.FuenteBase
+                  FontWeight: |-
+                    =If(locSeccion = ThisItem.Clave, FontWeight.Semibold, FontWeight.Normal)
+                  Color: |-
+                    =If(locSeccion = ThisItem.Clave, gblTema.Primario, gblTema.TextoSuave)
+                  OnSelect: |-
+                    =UpdateContext({locSeccion: ThisItem.Clave})
+            - recSubSeccion:
+                Control: Rectangle
+                Properties:
+                  X: =0
+                  Y: =40
+                  Width: =Parent.TemplateWidth
+                  Height: =3
+                  Fill: =gblTema.Primario
+                  Visible: =locSeccion = ThisItem.Clave
+
+      # --- Avisos de configuración incompleta ---------------------------------
+      - lblAvisoIncompletas:
+          Control: Label
+          Properties:
+            Text: |-
+              =With({_malas: Filter(colMatriz, Activo = true,
+                        IsBlank(AprobadorUsuario.Email), IsBlank(AprobadorGrupo),
+                        !(RolAprobador.Value in ["Jefe de area", "Gerente de area"]))},
+                  If(CountRows(_malas) = 0, "",
+                     CountRows(_malas) & " regla(s) activa(s) sin aprobador asignado. Un contrato que llegue a ese nivel se detendrá y se notificará al administrador."))
+            X: =24
+            Y: =130
+            Width: =Parent.Width - 48
+            Height: =36
+            Color: =gblTema.Error
+            Size: =gblTema.FuenteMenor
+            Visible: =locSeccion = "Matriz" && !IsBlank(lblAvisoIncompletas.Text)
+      - lblAvisoAreas:
+          Control: Label
+          Properties:
+            Text: |-
+              =With({_sin: Filter(colAreasAdmin, Activo = true, IsBlank(Responsable.Email))},
+                  If(CountRows(_sin) = 0, "",
+                     CountRows(_sin) & " área(s) activa(s) sin responsable: " &
+                     Concat(_sin, Title, ", ") & ". Los niveles 'Jefe de área' no se podrán resolver."))
+            X: =24
+            Y: =166
+            Width: =Parent.Width - 48
+            Height: =36
+            Color: =gblTema.Error
+            Size: =gblTema.FuenteMenor
+            Visible: =locSeccion in ["Matriz", "Áreas"] && !IsBlank(lblAvisoAreas.Text)
+
+      # --- Simulador de ruta ---------------------------------------------------
+      - lblTitSimulador:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Simulador: ¿quién aprobaría un contrato así?"
+            X: =24
+            Y: =210
+            Width: =Parent.Width - 48
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+            Visible: =locSeccion = "Matriz"
+      - txtSimMonto:
+          Control: Classic/TextInput
+          Properties:
+            HintText: ="Monto en moneda base"
+            Format: =TextFormat.Number
+            X: =24
+            Y: =246
+            Width: =200
+            Height: =40
+            BorderColor: =gblTema.Borde
+            Visible: =locSeccion = "Matriz"
+      - cmbSimTipo:
+          Control: Classic/ComboBox
+          Properties:
+            Items: =Choices(Contratos.TipoContrato)
+            DisplayFields: =["Value"]
+            SearchFields: =["Value"]
+            SelectMultiple: =false
+            X: =236
+            Y: =246
+            Width: =240
+            Height: =40
+            Visible: =locSeccion = "Matriz"
+      - cmbSimArea:
+          Control: Classic/ComboBox
+          Properties:
+            Items: =colAreas
+            DisplayFields: =["Title"]
+            SearchFields: =["Title"]
+            SelectMultiple: =false
+            X: =488
+            Y: =246
+            Width: =240
+            Height: =40
+            Visible: =locSeccion = "Matriz"
+      - btnSimular:
+          Control: Button
+          Properties:
+            Text: ="Simular"
+            X: =740
+            Y: =246
+            Width: =140
+            Height: =40
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Matriz"
+            OnSelect: |-
+              =With({_monto: Coalesce(Value(txtSimMonto.Text), 0),
+                     _tipo: cmbSimTipo.Selected.Value,
+                     _area: cmbSimArea.Selected},
+                  ClearCollect(colSimAplicables,
+                      Filter(colMatriz, Activo = true,
+                          MontoDesdePEN <= _monto, MontoHastaPEN > _monto,
+                          TipoContrato.Value = _tipo || TipoContrato.Value = "Todos"));
+                  ClearCollect(colSimRuta,
+                      ForAll(Distinct(colSimAplicables, Nivel) As _n,
+                          With({_especifica: First(Filter(colSimAplicables, Nivel = _n.Value, TipoContrato.Value = _tipo)),
+                                _generica: First(Filter(colSimAplicables, Nivel = _n.Value, TipoContrato.Value = "Todos"))},
+                              With({_r: If(IsBlank(_especifica.ID), _generica, _especifica)},
+                                  {Nivel: _n.Value,
+                                   Rol: _r.RolAprobador.Value,
+                                   Aprobador: Switch(_r.RolAprobador.Value,
+                                       "Jefe de area", Coalesce(_area.Responsable.DisplayName, "⚠ área sin responsable"),
+                                       "Gerente de area", Coalesce(_area.Gerente.DisplayName, "⚠ área sin gerente"),
+                                       Coalesce(_r.AprobadorUsuario.DisplayName, _r.AprobadorGrupo, "⚠ sin aprobador")),
+                                   SLA: _r.SLAHoras})))));
+              UpdateContext({locSimulado: true})
+      - lblSimResumen:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(CountRows(colSimRuta) = 0,
+                  "⚠ Ningún tramo de la matriz cubre ese monto para ese tipo de contrato. Un contrato así quedaría detenido.",
+                  "Se requieren " & CountRows(colSimRuta) & " nivel(es) de aprobación. SLA total estimado: " & Sum(colSimRuta, SLA) & " horas.")
+            X: =24
+            Y: =296
+            Width: =Parent.Width - 48
+            Height: =28
+            Size: =gblTema.FuenteBase
+            Color: |-
+              =If(CountRows(colSimRuta) = 0, gblTema.Error, gblTema.Texto)
+            Visible: =locSeccion = "Matriz" && locSimulado
+      - galSimulacion:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =330
+            Width: =Parent.Width - 48
+            Height: =160
+            TemplateSize: =40
+            Visible: =locSeccion = "Matriz" && locSimulado
+            Items: =SortByColumns(colSimRuta, "Nivel", SortOrder.Ascending)
+          Children:
+            - lblSimNivel:
+                Control: Label
+                Properties:
+                  Text: ="Nivel " & ThisItem.Nivel
+                  X: =12
+                  Y: =8
+                  Width: =120
+                  Height: =24
+                  Size: =gblTema.FuenteMenor
+                  FontWeight: =FontWeight.Semibold
+            - lblSimRol:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Rol
+                  X: =140
+                  Y: =8
+                  Width: =220
+                  Height: =24
+                  Size: =gblTema.FuenteMenor
+            - lblSimAprobador:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Aprobador
+                  X: =370
+                  Y: =8
+                  Width: =320
+                  Height: =24
+                  Size: =gblTema.FuenteMenor
+                  Color: |-
+                    =If(StartsWith(ThisItem.Aprobador, "⚠"), gblTema.Error, gblTema.Texto)
+            - lblSimSla:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.SLA & " h"
+                  X: =700
+                  Y: =8
+                  Width: =80
+                  Height: =24
+                  Size: =gblTema.FuenteMenor
+                  Color: =gblTema.TextoSuave
+
+      # --- Matriz --------------------------------------------------------------
+      - galMatriz:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =502
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 534
+            TemplateSize: =64
+            Visible: =locSeccion = "Matriz"
+            Items: =colMatriz
+          Children:
+            - lblMatRegla:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Title
+                  X: =12
+                  Y: =8
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblMatTramo:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =Text(ThisItem.MontoDesdePEN, "#,##0") & " – " &
+                     If(ThisItem.MontoHastaPEN >= 999999999, "sin tope", Text(ThisItem.MontoHastaPEN, "#,##0"))
+                  X: =12
+                  Y: =32
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblMatNivelRol:
+                Control: Label
+                Properties:
+                  Text: ="N" & ThisItem.Nivel & " · " & ThisItem.RolAprobador.Value
+                  X: =Parent.TemplateWidth * 0.33
+                  Y: =20
+                  Width: =Parent.TemplateWidth * 0.2
+                  Height: =24
+                  Size: =gblTema.FuenteMenor
+            - lblMatAprobador:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =Coalesce(ThisItem.AprobadorUsuario.DisplayName, ThisItem.AprobadorGrupo,
+                        If(ThisItem.RolAprobador.Value in ["Jefe de area", "Gerente de area"],
+                           "(se resuelve por el área del contrato)", "⚠ sin aprobador"))
+                  X: =Parent.TemplateWidth * 0.55
+                  Y: =20
+                  Width: =Parent.TemplateWidth * 0.28
+                  Height: =24
+                  Size: =gblTema.FuenteMenor
+                  Color: |-
+                    =If(IsBlank(ThisItem.AprobadorUsuario.DisplayName) && IsBlank(ThisItem.AprobadorGrupo)
+                        && !(ThisItem.RolAprobador.Value in ["Jefe de area", "Gerente de area"]),
+                        gblTema.Error, gblTema.Texto)
+            - tglActivo:
+                Control: Classic/Toggle
+                Properties:
+                  Default: =ThisItem.Activo
+                  X: =Parent.TemplateWidth - 90
+                  Y: =20
+                  Width: =70
+                  Height: =24
+                  OnChange: |-
+                    =Patch(MatrizAprobacion, LookUp(MatrizAprobacion, ID = ThisItem.ID),
+                           {Activo: tglActivo.Value})
+
+      # --- Parámetros ----------------------------------------------------------
+      - galParametros:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =140
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 172
+            TemplateSize: =72
+            Visible: =locSeccion = "Parámetros"
+            Items: =SortByColumns(colParametros, "Title", SortOrder.Ascending)
+          Children:
+            - lblParClave:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Title
+                  X: =12
+                  Y: =8
+                  Width: =Parent.TemplateWidth * 0.25
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblParDescripcion:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Descripcion
+                  X: =12
+                  Y: =32
+                  Width: =Parent.TemplateWidth * 0.45
+                  Height: =32
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - txtParValor:
+                Control: Classic/TextInput
+                Properties:
+                  Default: =ThisItem.Valor
+                  X: =Parent.TemplateWidth * 0.5
+                  Y: =18
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =36
+                  BorderColor: =gblTema.Borde
+            - btnParGuardar:
+                Control: Button
+                Properties:
+                  Text: ="Guardar"
+                  X: =Parent.TemplateWidth - 140
+                  Y: =18
+                  Width: =120
+                  Height: =36
+                  Fill: =gblTema.Primario
+                  Color: =gblTema.TextoClaro
+                  BorderRadius: =gblTema.Radio
+                  DisplayMode: |-
+                    =If(txtParValor.Text = ThisItem.Valor, DisplayMode.Disabled, DisplayMode.Edit)
+                  OnSelect: |-
+                    =Patch(Parametros, LookUp(Parametros, ID = ThisItem.ID), {Valor: Trim(txtParValor.Text)});
+                    ClearCollect(colParametros, Parametros);
+                    Set(gblTCUSD, Coalesce(Value(LookUp(colParametros, Title = "TC_USD", Valor), "en-US"), 1));
+                    Set(gblTCEUR, Coalesce(Value(LookUp(colParametros, Title = "TC_EUR", Valor), "en-US"), 1));
+                    Set(gblDocuSignHabilitado, Lower(Coalesce(LookUp(colParametros, Title = "DOCUSIGN_HABILITADO", Valor), "false")) = "true");
+                    Notify("Parámetro actualizado.", NotificationType.Success)
+
+      # --- Áreas ---------------------------------------------------------------
+      - galAreas:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =212
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 244
+            TemplateSize: =64
+            Visible: =locSeccion = "Áreas"
+            Items: =SortByColumns(colAreasAdmin, "Title", SortOrder.Ascending)
+          Children:
+            - lblAreaNombre:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Title & " (" & ThisItem.CodigoArea & ")"
+                  X: =12
+                  Y: =20
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - cmbAreaResponsable:
+                Control: Classic/ComboBox
+                Properties:
+                  Items: |-
+                    =Office365Users.SearchUser({searchTerm: cmbAreaResponsable.SearchText, top: 20})
+                  DisplayFields: =["DisplayName"]
+                  SearchFields: =["DisplayName"]
+                  SelectMultiple: =false
+                  DefaultSelectedItems: =Table(ThisItem.Responsable)
+                  X: =Parent.TemplateWidth * 0.33
+                  Y: =14
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =36
+                  OnChange: |-
+                    =Patch(Areas, LookUp(Areas, ID = ThisItem.ID), {Responsable: cmbAreaResponsable.Selected});
+                    ClearCollect(colAreasAdmin, Areas)
+            - cmbAreaGerente:
+                Control: Classic/ComboBox
+                Properties:
+                  Items: |-
+                    =Office365Users.SearchUser({searchTerm: cmbAreaGerente.SearchText, top: 20})
+                  DisplayFields: =["DisplayName"]
+                  SearchFields: =["DisplayName"]
+                  SelectMultiple: =false
+                  DefaultSelectedItems: =Table(ThisItem.Gerente)
+                  X: =Parent.TemplateWidth * 0.65
+                  Y: =14
+                  Width: =Parent.TemplateWidth * 0.3
+                  Height: =36
+                  OnChange: |-
+                    =Patch(Areas, LookUp(Areas, ID = ThisItem.ID), {Gerente: cmbAreaGerente.Selected});
+                    ClearCollect(colAreasAdmin, Areas)

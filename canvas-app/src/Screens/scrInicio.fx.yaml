@@ -1,0 +1,287 @@
+# Tablero de entrada: indicadores, lo que hay que aprobar y lo que vence.
+# Fórmulas comentadas en canvas-app/formulas/01-inicio-y-bandeja.md
+Screens:
+  scrInicio:
+    Properties:
+      Fill: =gblTema.Fondo
+      OnVisible: |-
+        =Concurrent(
+            ClearCollect(colPorVencer,
+                Filter(Contratos,
+                    Estado.Value <> "Terminado", Estado.Value <> "Anulado",
+                    Estado.Value <> "Rechazado", VigenciaIndefinida <> true,
+                    FechaPreaviso <= gblHoy, FechaFin >= gblHoy)),
+            ClearCollect(colVencidos, Filter(Contratos, Estado.Value = "Vencido")),
+            ClearCollect(colMisAprobaciones,
+                Filter(Aprobaciones, Decision.Value = "Pendiente",
+                       AprobadorAsignado.Email = gblUsuario.Email)),
+            ClearCollect(colPrestamosAbiertos,
+                Filter(MovimientosCustodia, TipoMovimiento.Value = "Prestamo",
+                       IsBlank(FechaDevolucionReal)))
+        );
+        Set(gblTotalVigentes, CountRows(Filter(Contratos, Estado.Value = "Vigente")));
+    Children:
+      - recCabecera:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Primario
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =96
+      - lblTituloApp:
+          Control: Label
+          Properties:
+            Text: ="Contratos"
+            X: =24
+            Y: =20
+            Width: =400
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteTitulo
+            FontWeight: =FontWeight.Semibold
+      - lblSaludo:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Hola, " & First(Split(gblUsuario.FullName, " ")).Value
+            X: =24
+            Y: =54
+            Width: =400
+            Height: =24
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteBase
+      - icoAdmin:
+          Control: Classic/Icon
+          Properties:
+            Icon: =Icon.Settings
+            X: =Parent.Width - 284
+            Y: =36
+            Width: =32
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Tooltip: |-
+              ="Administración: matriz de aprobación, parámetros y áreas"
+            Visible: =gblEsAdmin
+            OnSelect: =Navigate(scrAdmin, ScreenTransition.Fade)
+      - btnVerTodos:
+          Control: Button
+          Properties:
+            Text: ="Ver todos los contratos"
+            X: =24
+            Y: =Parent.Height - 56
+            Width: =240
+            Height: =36
+            Fill: =gblTema.Fondo
+            Color: =gblTema.Primario
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            OnSelect: |-
+              =Set(gblFiltroEntrada, Blank());
+              Navigate(scrBandeja, ScreenTransition.Fade)
+      - btnNuevoContrato:
+          Control: Button
+          Properties:
+            Text: ="+ Registrar contrato"
+            X: =Parent.Width - 236
+            Y: =32
+            Width: =212
+            Height: =40
+            Fill: =gblTema.TextoClaro
+            Color: =gblTema.Primario
+            BorderRadius: =gblTema.Radio
+            OnSelect: |-
+              =Set(gblContrato, Blank());
+              Set(gblModoEdicion, "Nuevo");
+              Navigate(scrEditar, ScreenTransition.Cover)
+
+      # --- Indicadores -----------------------------------------------------
+      - galIndicadores:
+          Control: Gallery
+          Variant: Horizontal
+          Properties:
+            X: =24
+            Y: =120
+            Width: =Parent.Width - 48
+            Height: =104
+            TemplateSize: =(Parent.Width - 48) / 4
+            TemplatePadding: =8
+            ShowScrollbar: =false
+            Items: |-
+              =Table(
+                  {Clave: "Vigentes",        Valor: gblTotalVigentes,            Tono: gblTema.Exito,       Destino: "Vigente"},
+                  {Clave: "Por vencer",      Valor: CountRows(colPorVencer),     Tono: gblTema.Advertencia, Destino: "Por vencer"},
+                  {Clave: "Vencidos",        Valor: CountRows(colVencidos),      Tono: gblTema.Error,       Destino: "Vencido"},
+                  {Clave: "Me toca aprobar", Valor: CountRows(colMisAprobaciones), Tono: gblTema.Info,      Destino: "Aprobaciones"}
+              )
+          Children:
+            - recTarjeta:
+                Control: Rectangle
+                Properties:
+                  Fill: =gblTema.Tarjeta
+                  X: =0
+                  Y: =0
+                  Width: =Parent.TemplateWidth - 16
+                  Height: =96
+                  BorderRadius: =gblTema.Radio
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+                  OnSelect: |-
+                    =If(ThisItem.Destino = "Aprobaciones",
+                        Navigate(scrAprobaciones, ScreenTransition.Fade),
+                        Set(gblFiltroEntrada, ThisItem.Destino);
+                        Navigate(scrBandeja, ScreenTransition.Fade))
+            - lblIndValor:
+                Control: Label
+                Properties:
+                  Text: =Text(ThisItem.Valor)
+                  X: =16
+                  Y: =12
+                  Width: =Parent.TemplateWidth - 48
+                  Height: =44
+                  Color: =ThisItem.Tono
+                  Size: =28
+                  FontWeight: =FontWeight.Bold
+            - lblIndClave:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Clave
+                  X: =16
+                  Y: =56
+                  Width: =Parent.TemplateWidth - 48
+                  Height: =24
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+
+      # --- Mis aprobaciones pendientes --------------------------------------
+      - lblTitPendientes:
+          Control: Label
+          Properties:
+            Text: ="Pendientes de tu aprobación"
+            X: =24
+            Y: =244
+            Width: =(Parent.Width - 64) / 2
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+            Color: =gblTema.Texto
+      - galPendientes:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =280
+            Width: =(Parent.Width - 64) / 2
+            Height: =Parent.Height - 312
+            TemplateSize: =76
+            Items: =SortByColumns(colMisAprobaciones, "FechaSolicitud", SortOrder.Ascending)
+            OnSelect: |-
+              =Set(gblContrato, LookUp(Contratos, ID = ThisItem.Contrato.Id));
+              Navigate(scrDetalle, ScreenTransition.Fade)
+          Children:
+            - lblPendContrato:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Contrato.Value
+                  X: =12
+                  Y: =8
+                  Width: =Parent.TemplateWidth - 140
+                  Height: =24
+                  FontWeight: =FontWeight.Semibold
+                  Size: =gblTema.FuenteBase
+            - lblPendNivel:
+                Control: Label
+                Properties:
+                  Text: ="Nivel " & ThisItem.Nivel & " · " & ThisItem.RolAprobador
+                  X: =12
+                  Y: =34
+                  Width: =Parent.TemplateWidth - 140
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblPendEspera:
+                Control: Label
+                Properties:
+                  Text: |-
+                    ="Hace " & DateDiff(ThisItem.FechaSolicitud, Now(), TimeUnit.Days) & " d"
+                  X: =Parent.TemplateWidth - 124
+                  Y: =20
+                  Width: =108
+                  Height: =24
+                  Align: =Align.Right
+                  Size: =gblTema.FuenteMenor
+                  Color: |-
+                    =If(DateDiff(ThisItem.FechaSolicitud, Now(), TimeUnit.Hours) > 48,
+                        gblTema.Error, gblTema.TextoSuave)
+      - lblSinPendientes:
+          Control: Label
+          Properties:
+            Text: ="No tienes aprobaciones pendientes."
+            X: =24
+            Y: =292
+            Width: =(Parent.Width - 64) / 2
+            Height: =40
+            Color: =gblTema.TextoSuave
+            Visible: =CountRows(colMisAprobaciones) = 0
+
+      # --- Próximos vencimientos --------------------------------------------
+      - lblTitVencen:
+          Control: Label
+          Properties:
+            Text: ="Próximos vencimientos"
+            X: =Parent.Width / 2 + 8
+            Y: =244
+            Width: =(Parent.Width - 64) / 2
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+            Color: =gblTema.Texto
+      - galPorVencer:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =Parent.Width / 2 + 8
+            Y: =280
+            Width: =(Parent.Width - 64) / 2
+            Height: =Parent.Height - 312
+            TemplateSize: =76
+            Items: =SortByColumns(colPorVencer, "FechaFin", SortOrder.Ascending)
+            OnSelect: |-
+              =Set(gblContrato, ThisItem);
+              Navigate(scrDetalle, ScreenTransition.Fade)
+          Children:
+            - lblVenceNombre:
+                Control: Label
+                Properties:
+                  Text: =Coalesce(ThisItem.Title, "(sin código)") & " · " & ThisItem.NombreContrato
+                  X: =12
+                  Y: =8
+                  Width: =Parent.TemplateWidth - 124
+                  Height: =24
+                  FontWeight: =FontWeight.Semibold
+                  Size: =gblTema.FuenteBase
+            - lblVenceContraparte:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Contraparte
+                  X: =12
+                  Y: =34
+                  Width: =Parent.TemplateWidth - 124
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblVenceDias:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =DateDiff(gblHoy, ThisItem.FechaFin, TimeUnit.Days) & " días"
+                  X: =Parent.TemplateWidth - 112
+                  Y: =20
+                  Width: =96
+                  Height: =24
+                  Align: =Align.Right
+                  FontWeight: =FontWeight.Semibold
+                  Color: |-
+                    =If(DateDiff(gblHoy, ThisItem.FechaFin, TimeUnit.Days) <= 7,
+                        gblTema.Error, gblTema.Advertencia)

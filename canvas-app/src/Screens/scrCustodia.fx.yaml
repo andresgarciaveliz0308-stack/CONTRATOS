@@ -1,0 +1,452 @@
+# Cadena de custodia del documento original: dónde está, quién lo tiene y desde
+# cuándo. Fórmulas comentadas en canvas-app/formulas/03-aprobaciones-y-custodia.md
+Screens:
+  scrCustodia:
+    Properties:
+      Fill: =gblTema.Fondo
+      OnVisible: |-
+        =ClearCollect(colMovimientos,
+            SortByColumns(Filter(MovimientosCustodia, Contrato.Id = gblContrato.ID),
+                          "FechaMovimiento", SortOrder.Descending));
+        Set(gblPrestamoAbierto,
+            First(Filter(colMovimientos, TipoMovimiento.Value = "Prestamo",
+                         IsBlank(FechaDevolucionReal))));
+        UpdateContext({locAccion: ""})
+    Children:
+      - recCabeceraC:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Primario
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =64
+      - icoVolverC:
+          Control: Classic/Icon
+          Properties:
+            Icon: =Icon.Back
+            X: =16
+            Y: =16
+            Width: =32
+            Height: =32
+            Color: =gblTema.TextoClaro
+            OnSelect: =Navigate(scrDetalle, ScreenTransition.UnCover)
+      - lblTituloC:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Custodia · " & Coalesce(gblContrato.Title, gblContrato.NombreContrato)
+            X: =60
+            Y: =16
+            Width: =Parent.Width - 120
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteTitulo
+            FontWeight: =FontWeight.Semibold
+
+      # --- Estado actual -----------------------------------------------------
+      - recEstadoCustodia:
+          Control: Rectangle
+          Properties:
+            X: =24
+            Y: =84
+            Width: =Parent.Width - 48
+            Height: =96
+            Fill: =gblTema.Tarjeta
+            BorderRadius: =gblTema.Radio
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+      - recSemaforoCustodia:
+          Control: Rectangle
+          Properties:
+            X: =24
+            Y: =84
+            Width: =6
+            Height: =96
+            Fill: |-
+              =Switch(gblContrato.EstadoCustodia.Value,
+                  "En custodia", gblTema.Exito,
+                  "Prestado", gblTema.Advertencia,
+                  "Pendiente de recepcion", gblTema.Error,
+                  gblTema.TextoSuave)
+      - lblEstadoCustodia:
+          Control: Label
+          Properties:
+            Text: =gblContrato.EstadoCustodia.Value
+            X: =44
+            Y: =96
+            Width: =320
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+      - lblUbicacion:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Ubicación: " & Coalesce(gblContrato.UbicacionFisica, "sin registrar")
+            X: =44
+            Y: =124
+            Width: =400
+            Height: =24
+            Color: =gblTema.TextoSuave
+            Size: =gblTema.FuenteMenor
+      - lblCustodio:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Custodio: " & Coalesce(gblContrato.Custodio.DisplayName, "sin asignar")
+            X: =44
+            Y: =148
+            Width: =400
+            Height: =24
+            Color: =gblTema.TextoSuave
+            Size: =gblTema.FuenteMenor
+      - lblQuienLoTiene:
+          Control: Label
+          Properties:
+            Text: |-
+              ="En poder de " & gblPrestamoAbierto.SolicitadoPor.DisplayName &
+               " desde el " & Text(gblPrestamoAbierto.FechaMovimiento, "dd/mm/yyyy")
+            X: =Parent.Width / 2
+            Y: =110
+            Width: =Parent.Width / 2 - 48
+            Height: =24
+            Color: =gblTema.Texto
+            Size: =gblTema.FuenteMenor
+            Visible: =!IsBlank(gblPrestamoAbierto)
+      - lblAtraso:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Devolución vencida hace " &
+               DateDiff(gblPrestamoAbierto.FechaCompromisoDevolucion, gblHoy, TimeUnit.Days) & " día(s)"
+            X: =Parent.Width / 2
+            Y: =136
+            Width: =Parent.Width / 2 - 48
+            Height: =24
+            Color: =gblTema.Error
+            Size: =gblTema.FuenteMenor
+            FontWeight: =FontWeight.Semibold
+            Visible: |-
+              =!IsBlank(gblPrestamoAbierto) && gblPrestamoAbierto.FechaCompromisoDevolucion < gblHoy
+
+      # --- Acciones ----------------------------------------------------------
+      - btnRecibir:
+          Control: Button
+          Properties:
+            Text: ="Registrar recepción"
+            X: =24
+            Y: =196
+            Width: =190
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: |-
+              =gblEsCustodio && gblContrato.EstadoCustodia.Value = "Pendiente de recepcion"
+            OnSelect: |-
+              =UpdateContext({locAccion: "Recepcion"})
+      - btnPrestar:
+          Control: Button
+          Properties:
+            Text: ="Prestar original"
+            X: =24
+            Y: =196
+            Width: =190
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =gblEsCustodio && gblContrato.EstadoCustodia.Value = "En custodia"
+            OnSelect: |-
+              =UpdateContext({locAccion: "Prestamo"})
+      - btnDevolver:
+          Control: Button
+          Properties:
+            Text: ="Registrar devolución"
+            X: =24
+            Y: =196
+            Width: =190
+            Height: =36
+            Fill: =gblTema.Exito
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =gblEsCustodio && gblContrato.EstadoCustodia.Value = "Prestado"
+            OnSelect: |-
+              =UpdateContext({locAccion: "Devolucion"})
+
+      # --- Panel de registro --------------------------------------------------
+      - recPanel:
+          Control: Rectangle
+          Properties:
+            X: =24
+            Y: =244
+            Width: =Parent.Width - 48
+            Height: =236
+            Fill: =gblTema.Tarjeta
+            BorderRadius: =gblTema.Radio
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            Visible: =!IsBlank(locAccion)
+      - lblPanelTitulo:
+          Control: Label
+          Properties:
+            Text: |-
+              =Switch(locAccion,
+                  "Recepcion", "Recepción del documento original",
+                  "Prestamo", "Préstamo del documento original",
+                  "Devolucion", "Devolución del documento original", "")
+            X: =44
+            Y: =260
+            Width: =Parent.Width - 88
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+            Visible: =!IsBlank(locAccion)
+      - txtUbicacion:
+          Control: Classic/TextInput
+          Properties:
+            Default: =Coalesce(gblContrato.UbicacionFisica, "")
+            HintText: ="Archivador 03 / Caja 12 / Folio 245"
+            X: =44
+            Y: =296
+            Width: =(Parent.Width - 108) / 2
+            Height: =40
+            BorderColor: =gblTema.Borde
+            Visible: =locAccion = "Recepcion"
+      - cmbSolicitante:
+          Control: Classic/ComboBox
+          Properties:
+            Items: |-
+              =Office365Users.SearchUser({searchTerm: cmbSolicitante.SearchText, top: 20})
+            DisplayFields: =["DisplayName"]
+            SearchFields: =["DisplayName"]
+            SelectMultiple: =false
+            X: =44
+            Y: =296
+            Width: =(Parent.Width - 108) / 2
+            Height: =40
+            Visible: =locAccion = "Prestamo"
+      - dteCompromiso:
+          Control: Classic/DatePicker
+          Properties:
+            DefaultDate: =DateAdd(gblHoy, 7, TimeUnit.Days)
+            X: =44 + (Parent.Width - 108) / 2 + 20
+            Y: =296
+            Width: =(Parent.Width - 108) / 2
+            Height: =40
+            Visible: =locAccion = "Prestamo"
+      - txtObservaciones:
+          Control: Classic/TextInput
+          Properties:
+            HintText: ="Observaciones (estado físico del documento, condiciones…)"
+            Mode: =TextMode.MultiLine
+            X: =44
+            Y: =348
+            Width: =Parent.Width - 88
+            Height: =72
+            BorderColor: =gblTema.Borde
+            Visible: =!IsBlank(locAccion)
+      - chkActa:
+          Control: Classic/CheckBox
+          Properties:
+            Text: ="Acta de entrega firmada"
+            X: =44
+            Y: =430
+            Width: =260
+            Height: =32
+            Visible: =locAccion in ["Recepcion", "Prestamo"]
+      - btnCancelarPanel:
+          Control: Button
+          Properties:
+            Text: ="Cancelar"
+            X: =Parent.Width - 344
+            Y: =430
+            Width: =140
+            Height: =36
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.TextoSuave
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: =!IsBlank(locAccion)
+            OnSelect: |-
+              =UpdateContext({locAccion: ""})
+      - btnConfirmar:
+          Control: Button
+          Properties:
+            Text: ="Confirmar"
+            X: =Parent.Width - 190
+            Y: =430
+            Width: =146
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =!IsBlank(locAccion)
+            OnSelect: |-
+              =Switch(locAccion,
+
+                  "Recepcion",
+                  If(IsBlank(Trim(txtUbicacion.Text)),
+                      Notify("Indica la ubicación física donde queda archivado el original.", NotificationType.Warning),
+                      Patch(MovimientosCustodia, Defaults(MovimientosCustodia), {
+                          Title: "MOV-" & Text(Year(gblHoy)) & "-" & Text(gblContrato.ID, "0000") & "-R",
+                          Contrato: {Id: gblContrato.ID, Value: gblContrato.Title},
+                          TipoMovimiento: {Value: "Recepcion de original"},
+                          FechaMovimiento: Now(), EntregadoPor: gblUsuario,
+                          UbicacionDestino: Trim(txtUbicacion.Text),
+                          ActaFirmada: chkActa.Value,
+                          Observaciones: Trim(txtObservaciones.Text)});
+                      Patch(Contratos, gblContrato, {
+                          EstadoCustodia: {Value: "En custodia"},
+                          UbicacionFisica: Trim(txtUbicacion.Text),
+                          Custodio: gblUsuario,
+                          FechaRecepcionOriginal: gblHoy});
+                      Notify("Recepción registrada. El original queda en custodia.", NotificationType.Success)),
+
+                  "Prestamo",
+                  If(IsBlank(cmbSolicitante.Selected),
+                      Notify("Indica a quién se entrega el documento original.", NotificationType.Warning),
+                      dteCompromiso.SelectedDate <= gblHoy,
+                      Notify("La fecha de compromiso de devolución debe ser posterior a hoy.", NotificationType.Warning),
+                      Patch(MovimientosCustodia, Defaults(MovimientosCustodia), {
+                          Title: "MOV-" & Text(Year(gblHoy)) & "-" & Text(gblContrato.ID, "0000") & "-P",
+                          Contrato: {Id: gblContrato.ID, Value: gblContrato.Title},
+                          TipoMovimiento: {Value: "Prestamo"},
+                          FechaMovimiento: Now(),
+                          SolicitadoPor: cmbSolicitante.Selected,
+                          EntregadoPor: gblUsuario,
+                          UbicacionOrigen: gblContrato.UbicacionFisica,
+                          FechaCompromisoDevolucion: dteCompromiso.SelectedDate,
+                          ActaFirmada: chkActa.Value,
+                          Observaciones: Trim(txtObservaciones.Text)});
+                      Patch(Contratos, gblContrato, {EstadoCustodia: {Value: "Prestado"}});
+                      Office365Outlook.SendEmailV2(
+                          cmbSolicitante.Selected.Email,
+                          "[Contratos] Cargo de entrega del original " & gblContrato.Title,
+                          "<p>Recibiste el documento original del contrato <b>" & gblContrato.Title &
+                          "</b> - " & gblContrato.NombreContrato & ".</p><p>Comprometiste su devolución para el <b>" &
+                          Text(dteCompromiso.SelectedDate, "dd/mm/yyyy") & "</b>.</p><p>Entregado por " &
+                          gblUsuario.FullName & ".</p>");
+                      Notify("Préstamo registrado y cargo enviado por correo.", NotificationType.Success)),
+
+                  "Devolucion",
+                  Patch(MovimientosCustodia, LookUp(MovimientosCustodia, ID = gblPrestamoAbierto.ID),
+                        {FechaDevolucionReal: gblHoy});
+                  Patch(MovimientosCustodia, Defaults(MovimientosCustodia), {
+                      Title: "MOV-" & Text(Year(gblHoy)) & "-" & Text(gblContrato.ID, "0000") & "-D",
+                      Contrato: {Id: gblContrato.ID, Value: gblContrato.Title},
+                      TipoMovimiento: {Value: "Devolucion"},
+                      FechaMovimiento: Now(),
+                      SolicitadoPor: gblPrestamoAbierto.SolicitadoPor,
+                      EntregadoPor: gblUsuario,
+                      UbicacionDestino: gblContrato.UbicacionFisica,
+                      Observaciones: Trim(txtObservaciones.Text)});
+                  Patch(Contratos, gblContrato, {EstadoCustodia: {Value: "En custodia"}});
+                  Set(gblPrestamoAbierto, Blank());
+                  Notify("Devolución registrada. El original vuelve al archivo.", NotificationType.Success)
+              );
+              Set(gblContrato, LookUp(Contratos, ID = gblContrato.ID));
+              ClearCollect(colMovimientos,
+                  SortByColumns(Filter(MovimientosCustodia, Contrato.Id = gblContrato.ID),
+                                "FechaMovimiento", SortOrder.Descending));
+              UpdateContext({locAccion: ""})
+
+      # --- Historial ----------------------------------------------------------
+      - lblTitHistorial:
+          Control: Label
+          Properties:
+            Text: ="Historial de movimientos"
+            X: =24
+            Y: |-
+              =If(IsBlank(locAccion), 248, 496)
+            Width: =400
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+      - galMovimientos:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: |-
+              =If(IsBlank(locAccion), 284, 532)
+            Width: =Parent.Width - 48
+            Height: |-
+              =Parent.Height - If(IsBlank(locAccion), 316, 564)
+            TemplateSize: =68
+            Items: =colMovimientos
+          Children:
+            - icoMovTipo:
+                Control: Classic/Icon
+                Properties:
+                  Icon: |-
+                    =Switch(ThisItem.TipoMovimiento.Value,
+                        "Recepcion de original", Icon.Add,
+                        "Prestamo", Icon.Send,
+                        "Devolucion", Icon.Undo,
+                        "Traslado", Icon.Redo,
+                        "Baja / Destruccion", Icon.Trash,
+                        Icon.Document)
+                  X: =12
+                  Y: =20
+                  Width: =24
+                  Height: =24
+                  Color: =gblTema.Primario
+            - lblMovTipo:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.TipoMovimiento.Value
+                  X: =48
+                  Y: =10
+                  Width: =Parent.TemplateWidth * 0.25
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblMovFecha:
+                Control: Label
+                Properties:
+                  Text: =Text(ThisItem.FechaMovimiento, "dd/mm/yyyy hh:mm")
+                  X: =48
+                  Y: =34
+                  Width: =Parent.TemplateWidth * 0.25
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblMovQuien:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =Coalesce(ThisItem.SolicitadoPor.DisplayName, ThisItem.EntregadoPor.DisplayName, "")
+                  X: =Parent.TemplateWidth * 0.3
+                  Y: =22
+                  Width: =Parent.TemplateWidth * 0.25
+                  Height: =24
+                  Size: =gblTema.FuenteMenor
+            - lblMovUbicaciones:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =If(IsBlank(ThisItem.UbicacionOrigen), Coalesce(ThisItem.UbicacionDestino, ""),
+                        ThisItem.UbicacionOrigen & " → " & Coalesce(ThisItem.UbicacionDestino, ""))
+                  X: =Parent.TemplateWidth * 0.56
+                  Y: =22
+                  Width: =Parent.TemplateWidth * 0.28
+                  Height: =24
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblMovPendiente:
+                Control: Label
+                Properties:
+                  Text: ="Sin devolver"
+                  X: =Parent.TemplateWidth - 140
+                  Y: =22
+                  Width: =124
+                  Height: =24
+                  Align: =Align.Right
+                  Color: =gblTema.Advertencia
+                  Size: =gblTema.FuenteMenor
+                  FontWeight: =FontWeight.Semibold
+                  Visible: |-
+                    =ThisItem.TipoMovimiento.Value = "Prestamo" && IsBlank(ThisItem.FechaDevolucionReal)

@@ -1,0 +1,197 @@
+# Panel de seguimiento de aprobaciones.
+# La decisión se toma en las tarjetas de Approvals (Teams / Outlook / portal):
+# esta pantalla muestra el estado y lleva al contrato, no duplica el acto de
+# aprobar. Detalle en canvas-app/formulas/03-aprobaciones-y-custodia.md
+Screens:
+  scrAprobaciones:
+    Properties:
+      Fill: =gblTema.Fondo
+      OnVisible: |-
+        =Concurrent(
+            ClearCollect(colPendientesMias,
+                Filter(Aprobaciones, Decision.Value = "Pendiente",
+                       AprobadorAsignado.Email = gblUsuario.Email)),
+            ClearCollect(colResueltasMias,
+                Filter(Aprobaciones, Decision.Value <> "Pendiente",
+                       ResueltoPor.Email = gblUsuario.Email)),
+            If(gblEsAdmin,
+                ClearCollect(colPendientesTodas, Filter(Aprobaciones, Decision.Value = "Pendiente")))
+        );
+        Set(gblSlaHoras,
+            Coalesce(Value(LookUp(colParametros, Title = "SLA_APROBACION_HORAS", Valor), "en-US"), 48));
+        UpdateContext({locVista: "Pendientes"})
+    Children:
+      - recCabeceraA:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Primario
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =64
+      - icoVolverA:
+          Control: Classic/Icon
+          Properties:
+            Icon: =Icon.Back
+            X: =16
+            Y: =16
+            Width: =32
+            Height: =32
+            Color: =gblTema.TextoClaro
+            OnSelect: =Navigate(scrInicio, ScreenTransition.UnCover)
+      - lblTituloA:
+          Control: Label
+          Properties:
+            Text: ="Aprobaciones"
+            X: =60
+            Y: =16
+            Width: =300
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteTitulo
+            FontWeight: =FontWeight.Semibold
+      - btnVistaTodas:
+          Control: Button
+          Properties:
+            Text: |-
+              =If(locVista = "Todas", "Ver solo las mías", "Ver todas")
+            X: =Parent.Width - 200
+            Y: =14
+            Width: =176
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderColor: =gblTema.TextoClaro
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: =gblEsAdmin
+            OnSelect: |-
+              =UpdateContext({locVista: If(locVista = "Todas", "Pendientes", "Todas")})
+      - lblAvisoDondeAprobar:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Las decisiones se registran en las tarjetas de aprobación de Teams, Outlook o el portal de Power Automate. Aquí ves el estado y el contexto."
+            X: =24
+            Y: =80
+            Width: =Parent.Width - 48
+            Height: =36
+            Color: =gblTema.TextoSuave
+            Size: =gblTema.FuenteMenor
+      - btnAbrirTareas:
+          Control: Button
+          Properties:
+            Text: ="Abrir mis tareas de aprobación"
+            X: =24
+            Y: =120
+            Width: =280
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            OnSelect: |-
+              =Launch("https://make.powerautomate.com/environments/~default/approvals/received")
+      - galPendientes:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =172
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 204
+            TemplateSize: =84
+            TemplatePadding: =6
+            Items: |-
+              =SortByColumns(
+                  If(locVista = "Todas" && gblEsAdmin, colPendientesTodas, colPendientesMias),
+                  "FechaSolicitud", SortOrder.Ascending)
+            OnSelect: |-
+              =Set(gblContrato, LookUp(Contratos, ID = ThisItem.Contrato.Id));
+              Navigate(scrDetalle, ScreenTransition.Fade)
+          Children:
+            - recFilaA:
+                Control: Rectangle
+                Properties:
+                  Fill: =gblTema.Tarjeta
+                  X: =0
+                  Y: =0
+                  Width: =Parent.TemplateWidth
+                  Height: =78
+                  BorderRadius: =gblTema.Radio
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+            - lblAContrato:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Contrato.Value
+                  X: =16
+                  Y: =10
+                  Width: =Parent.TemplateWidth * 0.4
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblANivel:
+                Control: Label
+                Properties:
+                  Text: ="Nivel " & ThisItem.Nivel & " · " & ThisItem.RolAprobador
+                  X: =16
+                  Y: =36
+                  Width: =Parent.TemplateWidth * 0.4
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblAAsignado:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.AprobadorAsignado.DisplayName
+                  X: =Parent.TemplateWidth * 0.44
+                  Y: =24
+                  Width: =Parent.TemplateWidth * 0.26
+                  Height: =24
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+                  Visible: =locVista = "Todas"
+            - lblAEspera:
+                Control: Label
+                Properties:
+                  Text: |-
+                    ="Pendiente hace " & DateDiff(ThisItem.FechaSolicitud, Now(), TimeUnit.Hours) & " h"
+                  X: =Parent.TemplateWidth - 280
+                  Y: =24
+                  Width: =160
+                  Height: =24
+                  Align: =Align.Right
+                  Size: =gblTema.FuenteMenor
+                  Color: |-
+                    =If(DateDiff(ThisItem.FechaSolicitud, Now(), TimeUnit.Hours) > gblSlaHoras,
+                        gblTema.Error, gblTema.TextoSuave)
+            - lblASla:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =If(DateDiff(ThisItem.FechaSolicitud, Now(), TimeUnit.Hours) > gblSlaHoras,
+                        "SLA vencido", "Dentro del SLA")
+                  X: =Parent.TemplateWidth - 112
+                  Y: =24
+                  Width: =96
+                  Height: =24
+                  Align: =Align.Right
+                  Size: =gblTema.FuenteMenor
+                  FontWeight: =FontWeight.Semibold
+                  Color: |-
+                    =If(DateDiff(ThisItem.FechaSolicitud, Now(), TimeUnit.Hours) > gblSlaHoras,
+                        gblTema.Error, gblTema.Exito)
+      - lblSinAprobaciones:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(locVista = "Todas",
+                  "No hay aprobaciones pendientes en el sistema.",
+                  "No tienes aprobaciones pendientes.")
+            X: =24
+            Y: =220
+            Width: =Parent.Width - 48
+            Height: =48
+            Align: =Align.Center
+            Color: =gblTema.TextoSuave
+            Visible: =CountRows(galPendientes.AllItems) = 0

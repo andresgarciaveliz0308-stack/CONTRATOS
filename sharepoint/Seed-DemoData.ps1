@@ -99,6 +99,11 @@ $parametros = @(
     @{ K = 'DOCUSIGN_TEMPLATE_ID';   V = '';                      T = 'Texto';    D = 'GUID de la plantilla de DocuSign. Vacio = sobre libre.' }
     @{ K = 'RETENCION_ANIOS';        V = '10';                    T = 'Numero';   D = 'Anios de retencion del expediente tras la terminacion.' }
     @{ K = 'PREFIJO_CODIGO';         V = 'CTR';                   T = 'Texto';    D = 'Prefijo del correlativo de contratos.' }
+    # --- Roles que lee la app de Power Apps para mostrar u ocultar acciones.
+    #     Correos separados por punto y coma. COMPLETAR antes de usar la app.
+    @{ K = 'ADMINS';                 V = '';                      T = 'Texto';    D = 'Correos con acceso a la pantalla de administracion, separados por ";".' }
+    @{ K = 'CUSTODIOS';              V = '';                      T = 'Texto';    D = 'Correos que pueden registrar prestamos y devoluciones, separados por ";".' }
+    @{ K = 'LEGAL';                  V = '';                      T = 'Texto';    D = 'Correos que pueden dar el visto bueno legal, separados por ";".' }
 )
 
 foreach ($p in $parametros) {
@@ -333,6 +338,8 @@ Write-Host @"
    Datos iniciales cargados.
 
    REVISA ANTES DE PRODUCCION:
+     - Parametros : ADMINS, CUSTODIOS y LEGAL estan VACIOS. Sin ellos
+       la app oculta las acciones de administracion y custodia.
      - Parametros : correos, tipos de cambio y DOCUSIGN_TEMPLATE_ID
      - Areas      : Responsable y Gerente de cada area
      - MatrizAprobacion : tramos de monto y aprobadores de los

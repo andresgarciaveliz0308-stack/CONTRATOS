@@ -1,0 +1,262 @@
+# Bandeja: búsqueda y listado de contratos.
+# La consulta se construye en ramas para que cada una se delegue entera.
+# Fórmulas comentadas en canvas-app/formulas/01-inicio-y-bandeja.md
+Screens:
+  scrBandeja:
+    Properties:
+      Fill: =gblTema.Fondo
+      OnVisible: |-
+        =UpdateContext({
+            locEstado: If(gblFiltroEntrada = "Por vencer", "Por vencer",
+                       If(gblFiltroEntrada = "Vigente", "Vigente",
+                       If(gblFiltroEntrada = "Vencido", "Vencido", "(Todos)"))),
+            locTipo: "(Todos)",
+            locSoloMios: false
+        });
+        Set(gblFiltroEntrada, Blank());
+        Reset(txtBuscar)
+    Children:
+      - recCabeceraB:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Primario
+            X: =0
+            Y: =0
+            Width: =Parent.Width
+            Height: =64
+      - icoVolver:
+          Control: Classic/Icon
+          Properties:
+            Icon: =Icon.Back
+            X: =16
+            Y: =16
+            Width: =32
+            Height: =32
+            Color: =gblTema.TextoClaro
+            OnSelect: =Navigate(scrInicio, ScreenTransition.UnCover)
+      - lblTituloB:
+          Control: Label
+          Properties:
+            Text: ="Contratos"
+            X: =60
+            Y: =16
+            Width: =300
+            Height: =32
+            Color: =gblTema.TextoClaro
+            Size: =gblTema.FuenteTitulo
+            FontWeight: =FontWeight.Semibold
+
+      # --- Filtros ----------------------------------------------------------
+      - txtBuscar:
+          Control: Classic/TextInput
+          Properties:
+            HintText: ="Empieza a escribir el código, nombre o contraparte"
+            X: =24
+            Y: =84
+            Width: =(Parent.Width - 72) * 0.5
+            Height: =40
+            BorderColor: =gblTema.Borde
+      - cmbEstado:
+          Control: Classic/ComboBox
+          Properties:
+            Items: =colEstadosFiltro
+            DisplayFields: =["Valor"]
+            SearchFields: =["Valor"]
+            SelectMultiple: =false
+            DefaultSelectedItems: =LookUp(colEstadosFiltro, Valor = locEstado)
+            X: =24 + (Parent.Width - 72) * 0.5 + 12
+            Y: =84
+            Width: =(Parent.Width - 72) * 0.25
+            Height: =40
+            OnChange: |-
+              =UpdateContext({locEstado: Coalesce(cmbEstado.Selected.Valor, "(Todos)")})
+      - cmbTipo:
+          Control: Classic/ComboBox
+          Properties:
+            Items: |-
+              =Ungroup(
+                  Table({v: Table({Value: "(Todos)"})}, {v: Choices(Contratos.TipoContrato)}),
+                  "v")
+            DisplayFields: =["Value"]
+            SearchFields: =["Value"]
+            SelectMultiple: =false
+            X: =24 + (Parent.Width - 72) * 0.75 + 24
+            Y: =84
+            Width: =(Parent.Width - 72) * 0.25
+            Height: =40
+            OnChange: |-
+              =UpdateContext({locTipo: Coalesce(cmbTipo.Selected.Value, "(Todos)")})
+
+      # --- Listado ----------------------------------------------------------
+      - galContratos:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =140
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 172
+            TemplateSize: =92
+            TemplatePadding: =6
+            Items: |-
+              =SortByColumns(
+                  With({_buscar: Trim(txtBuscar.Text)},
+                      Switch(
+                          (locEstado <> "(Todos)") & "|" & (locTipo <> "(Todos)"),
+
+                          "true|true",
+                              Filter(Contratos,
+                                  Estado.Value = locEstado,
+                                  TipoContrato.Value = locTipo,
+                                  StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
+
+                          "true|false",
+                              Filter(Contratos,
+                                  Estado.Value = locEstado,
+                                  StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
+
+                          "false|true",
+                              Filter(Contratos,
+                                  TipoContrato.Value = locTipo,
+                                  StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
+
+                          Filter(Contratos,
+                              StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar))
+                      )
+                  ),
+                  "FechaFin", SortOrder.Ascending)
+            OnSelect: |-
+              =Set(gblContrato, ThisItem);
+              Navigate(scrDetalle, ScreenTransition.Fade)
+          Children:
+            - recFila:
+                Control: Rectangle
+                Properties:
+                  Fill: =gblTema.Tarjeta
+                  X: =0
+                  Y: =0
+                  Width: =Parent.TemplateWidth
+                  Height: =86
+                  BorderRadius: =gblTema.Radio
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+            - recEstadoBarra:
+                Control: Rectangle
+                Properties:
+                  X: =0
+                  Y: =0
+                  Width: =5
+                  Height: =86
+                  Fill: |-
+                    =Switch(ThisItem.Estado.Value,
+                        "Vigente", gblTema.Exito,
+                        "Aprobado", gblTema.Exito,
+                        "Por vencer", gblTema.Advertencia,
+                        "En aprobacion", gblTema.Info,
+                        "En revision legal", gblTema.Info,
+                        "En firma", gblTema.Info,
+                        "Vencido", gblTema.Error,
+                        "Rechazado", gblTema.Error,
+                        gblTema.TextoSuave)
+            - lblFilaCodigo:
+                Control: Label
+                Properties:
+                  Text: =Coalesce(ThisItem.Title, "(sin código)")
+                  X: =18
+                  Y: =10
+                  Width: =140
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+                  FontWeight: =FontWeight.Semibold
+            - lblFilaNombre:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.NombreContrato
+                  X: =18
+                  Y: =30
+                  Width: =Parent.TemplateWidth * 0.42
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblFilaContraparte:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =ThisItem.Contraparte &
+                     If(IsBlank(ThisItem.ContraparteRUC), "", " · RUC " & ThisItem.ContraparteRUC)
+                  X: =18
+                  Y: =54
+                  Width: =Parent.TemplateWidth * 0.42
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblFilaMonto:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =If(ThisItem.SinMontoDeterminado, "Monto no determinado",
+                        ThisItem.Moneda.Value & " " & Text(ThisItem.Monto, "#,##0.00"))
+                  X: =Parent.TemplateWidth * 0.46
+                  Y: =30
+                  Width: =Parent.TemplateWidth * 0.2
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+            - lblFilaVigencia:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =Text(ThisItem.FechaInicio, "dd/mm/yyyy") & " → " &
+                     If(ThisItem.VigenciaIndefinida, "indefinida", Text(ThisItem.FechaFin, "dd/mm/yyyy"))
+                  X: =Parent.TemplateWidth * 0.46
+                  Y: =54
+                  Width: =Parent.TemplateWidth * 0.25
+                  Height: =22
+                  Color: =gblTema.TextoSuave
+                  Size: =gblTema.FuenteMenor
+            - lblFilaEstado:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Estado.Value
+                  X: =Parent.TemplateWidth - 200
+                  Y: =30
+                  Width: =130
+                  Height: =24
+                  Align: =Align.Right
+                  Size: =gblTema.FuenteMenor
+                  FontWeight: =FontWeight.Semibold
+            - icoFilaCustodia:
+                Control: Classic/Icon
+                Properties:
+                  Icon: |-
+                    =Switch(ThisItem.EstadoCustodia.Value,
+                        "En custodia", Icon.Lock,
+                        "Prestado", Icon.Clock,
+                        "Solo digital", Icon.Document,
+                        Icon.Warning)
+                  Tooltip: |-
+                    ="Custodia: " & ThisItem.EstadoCustodia.Value
+                  X: =Parent.TemplateWidth - 56
+                  Y: =30
+                  Width: =24
+                  Height: =24
+                  Color: |-
+                    =Switch(ThisItem.EstadoCustodia.Value,
+                        "En custodia", gblTema.Exito,
+                        "Prestado", gblTema.Advertencia,
+                        "Pendiente de recepcion", gblTema.Error,
+                        gblTema.TextoSuave)
+      - lblSinResultados:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(IsBlank(Trim(txtBuscar.Text)) && locEstado = "(Todos)" && locTipo = "(Todos)",
+                  "Todavía no hay contratos registrados.",
+                  "Ningún contrato coincide con la búsqueda. Prueba con menos filtros.")
+            X: =24
+            Y: =180
+            Width: =Parent.Width - 48
+            Height: =48
+            Align: =Align.Center
+            Color: =gblTema.TextoSuave
+            Visible: =CountRows(galContratos.AllItems) = 0
