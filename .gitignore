@@ -28,3 +28,6 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# Salida de power-automate/Build-Package.ps1
+power-automate/build/

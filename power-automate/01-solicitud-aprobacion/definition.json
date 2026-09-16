@@ -1,0 +1,577 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Workflow de aprobacion multinivel. Resuelve los niveles contra la lista MatrizAprobacion segun el tipo de contrato y el monto en moneda base, y los ejecuta de forma secuencial. Cambiar quien aprueba se hace editando la lista, no este flujo.",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+  },
+  "triggers": {
+    "Solicitud_desde_la_app": {
+      "type": "Request",
+      "kind": "PowerAppV2",
+      "description": "Lo invoca la pantalla de detalle del contrato en Power Apps.",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "title": "ContratoId",
+              "type": "number",
+              "x-ms-dynamically-added": true,
+              "description": "Id del elemento de la lista Contratos"
+            }
+          },
+          "required": ["number"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Var_Rechazado": {
+      "type": "InitializeVariable",
+      "inputs": { "variables": [ { "name": "varRechazado", "type": "boolean", "value": false } ] }
+    },
+    "Var_Motivo": {
+      "type": "InitializeVariable",
+      "runAfter": { "Var_Rechazado": ["Succeeded"] },
+      "inputs": { "variables": [ { "name": "varMotivo", "type": "string", "value": "" } ] }
+    },
+
+    "Obtener_contrato": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Var_Motivo": ["Succeeded"] },
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Contratos",
+          "id": "@triggerBody()['number']"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+
+    "Obtener_correo_del_administrador": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Obtener_contrato": ["Succeeded"] },
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Parametros",
+          "$filter": "Title eq 'CORREO_ADMIN_CONTRATOS'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Correo_admin": {
+      "type": "Compose",
+      "runAfter": { "Obtener_correo_del_administrador": ["Succeeded"] },
+      "inputs": "@if(empty(body('Obtener_correo_del_administrador')?['value']), '', first(body('Obtener_correo_del_administrador')?['value'])?['Valor'])"
+    },
+
+    "Obtener_tipo_de_cambio": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Correo_admin": ["Succeeded"] },
+      "description": "Busca el parametro TC_<moneda>. Para PEN no existe y el tipo de cambio queda en 1.",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Parametros",
+          "$filter": "Title eq 'TC_@{outputs('Obtener_contrato')?['body/Moneda/Value']}'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Tipo_de_cambio": {
+      "type": "Compose",
+      "runAfter": { "Obtener_tipo_de_cambio": ["Succeeded"] },
+      "inputs": "@if(empty(body('Obtener_tipo_de_cambio')?['value']), 1, float(first(body('Obtener_tipo_de_cambio')?['value'])?['Valor']))"
+    },
+    "Monto_en_moneda_base": {
+      "type": "Compose",
+      "runAfter": { "Tipo_de_cambio": ["Succeeded"] },
+      "description": "Un contrato sin monto determinado se evalua en el tramo mas alto de la matriz.",
+      "inputs": "@if(equals(outputs('Obtener_contrato')?['body/SinMontoDeterminado'], true), 999999999, mul(float(coalesce(outputs('Obtener_contrato')?['body/Monto'], 0)), outputs('Tipo_de_cambio')))"
+    },
+
+    "Obtener_reglas": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Monto_en_moneda_base": ["Succeeded"] },
+      "description": "Reglas activas cuyo tramo de monto contiene al contrato, del tipo especifico o genericas.",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "MatrizAprobacion",
+          "$filter": "Activo eq 1 and MontoDesdePEN le @{outputs('Monto_en_moneda_base')} and MontoHastaPEN gt @{outputs('Monto_en_moneda_base')} and (TipoContrato eq '@{outputs('Obtener_contrato')?['body/TipoContrato/Value']}' or TipoContrato eq 'Todos')",
+          "$orderby": "Nivel asc",
+          "$top": 100
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Reglas_del_tipo": {
+      "type": "Query",
+      "runAfter": { "Obtener_reglas": ["Succeeded"] },
+      "inputs": {
+        "from": "@body('Obtener_reglas')?['value']",
+        "where": "@equals(item()?['TipoContrato']?['Value'], outputs('Obtener_contrato')?['body/TipoContrato/Value'])"
+      }
+    },
+    "Reglas_genericas": {
+      "type": "Query",
+      "runAfter": { "Reglas_del_tipo": ["Succeeded"] },
+      "inputs": {
+        "from": "@body('Obtener_reglas')?['value']",
+        "where": "@equals(item()?['TipoContrato']?['Value'], 'Todos')"
+      }
+    },
+    "Niveles_brutos": {
+      "type": "Select",
+      "runAfter": { "Reglas_genericas": ["Succeeded"] },
+      "inputs": {
+        "from": "@body('Obtener_reglas')?['value']",
+        "select": "@item()?['Nivel']"
+      }
+    },
+    "Niveles": {
+      "type": "Compose",
+      "runAfter": { "Niveles_brutos": ["Succeeded"] },
+      "description": "union() elimina los niveles duplicados entre reglas especificas y genericas; sort() los ordena de menor a mayor.",
+      "inputs": "@sort(union(body('Niveles_brutos'), body('Niveles_brutos')))"
+    },
+
+    "Si_hay_reglas_aplicables": {
+      "type": "If",
+      "runAfter": { "Niveles": ["Succeeded"] },
+      "expression": { "greater": [ "@length(outputs('Niveles'))", 0 ] },
+      "actions": {
+
+        "Marcar_en_aprobacion": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "Contratos",
+              "id": "@triggerBody()['number']",
+              "item/Estado/Value": "En aprobacion",
+              "item/MontoPEN": "@outputs('Monto_en_moneda_base')",
+              "item/TipoCambio": "@outputs('Tipo_de_cambio')",
+              "item/NivelAprobacionRequerido": "@length(outputs('Niveles'))",
+              "item/NivelAprobacionActual": 0,
+              "item/CicloAprobacion": "@add(int(coalesce(outputs('Obtener_contrato')?['body/CicloAprobacion'], 0)), 1)",
+              "item/FechaEnvioAprobacion": "@utcNow()",
+              "item/MotivoRechazo": ""
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Obtener_area": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Marcar_en_aprobacion": ["Succeeded"] },
+          "description": "De aqui salen los aprobadores de los roles 'Jefe de area' y 'Gerente de area'.",
+          "inputs": {
+            "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "Areas",
+              "id": "@outputs('Obtener_contrato')?['body/AreaSolicitante/Id']"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Enlace_al_contrato": {
+          "type": "Compose",
+          "runAfter": { "Obtener_area": ["Succeeded"] },
+          "inputs": "@concat('https://CONTOSO.sharepoint.com/sites/Contratos/Lists/Contratos/DispForm.aspx?ID=', string(triggerBody()['number']))"
+        },
+        "Ciclo_actual": {
+          "type": "Compose",
+          "runAfter": { "Enlace_al_contrato": ["Succeeded"] },
+          "inputs": "@add(int(coalesce(outputs('Obtener_contrato')?['body/CicloAprobacion'], 0)), 1)"
+        },
+
+        "Responder_a_la_app": {
+          "type": "Response",
+          "kind": "PowerApp",
+          "runAfter": { "Ciclo_actual": ["Succeeded"] },
+          "description": "Se responde ANTES de esperar las aprobaciones: una llamada desde Power Apps expira a los ~2 minutos y el workflow puede durar dias.",
+          "inputs": {
+            "statusCode": 200,
+            "body": {
+              "Resultado": "Enviado",
+              "Mensaje": "@concat('Contrato enviado a aprobacion. Niveles requeridos: ', string(length(outputs('Niveles'))), '.')",
+              "NivelesRequeridos": "@length(outputs('Niveles'))"
+            },
+            "schema": {
+              "type": "object",
+              "properties": {
+                "Resultado": { "type": "string" },
+                "Mensaje": { "type": "string" },
+                "NivelesRequeridos": { "type": "integer" }
+              }
+            }
+          }
+        },
+
+        "Recorrer_niveles": {
+          "type": "Foreach",
+          "runAfter": { "Responder_a_la_app": ["Succeeded"] },
+          "description": "Secuencial: la concurrencia esta fijada en 1 para que el nivel N+1 no arranque antes de resolverse el nivel N.",
+          "foreach": "@outputs('Niveles')",
+          "runtimeConfiguration": { "concurrency": { "repetitions": 1 } },
+          "actions": {
+
+            "Si_no_hubo_rechazo": {
+              "type": "If",
+              "description": "Un rechazo corta la cadena: los niveles restantes no se solicitan.",
+              "expression": { "equals": [ "@variables('varRechazado')", false ] },
+              "actions": {
+
+                "Regla_especifica_del_nivel": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Reglas_del_tipo')",
+                    "where": "@equals(item()?['Nivel'], items('Recorrer_niveles'))"
+                  }
+                },
+                "Regla_generica_del_nivel": {
+                  "type": "Query",
+                  "runAfter": { "Regla_especifica_del_nivel": ["Succeeded"] },
+                  "inputs": {
+                    "from": "@body('Reglas_genericas')",
+                    "where": "@equals(item()?['Nivel'], items('Recorrer_niveles'))"
+                  }
+                },
+                "Regla": {
+                  "type": "Compose",
+                  "runAfter": { "Regla_generica_del_nivel": ["Succeeded"] },
+                  "description": "La regla del tipo de contrato gana sobre la generica en el mismo nivel.",
+                  "inputs": "@if(empty(body('Regla_especifica_del_nivel')), first(body('Regla_generica_del_nivel')), first(body('Regla_especifica_del_nivel')))"
+                },
+                "Aprobador": {
+                  "type": "Compose",
+                  "runAfter": { "Regla": ["Succeeded"] },
+                  "description": "Resolucion del destinatario segun el rol. El grupo, si esta informado, tiene prioridad sobre el usuario.",
+                  "inputs": "@if(equals(outputs('Regla')?['RolAprobador']?['Value'], 'Jefe de area'), coalesce(body('Obtener_area')?['Responsable']?['Email'], ''), if(equals(outputs('Regla')?['RolAprobador']?['Value'], 'Gerente de area'), coalesce(body('Obtener_area')?['Gerente']?['Email'], ''), if(not(empty(coalesce(outputs('Regla')?['AprobadorGrupo'], ''))), outputs('Regla')?['AprobadorGrupo'], coalesce(outputs('Regla')?['AprobadorUsuario']?['Email'], ''))))"
+                },
+
+                "Si_se_resolvio_el_aprobador": {
+                  "type": "If",
+                  "runAfter": { "Aprobador": ["Succeeded"] },
+                  "expression": { "not": { "equals": [ "@empty(outputs('Aprobador'))", true ] } },
+                  "actions": {
+
+                    "Crear_tarea_de_aprobacion": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                        "parameters": {
+                          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                          "table": "Aprobaciones",
+                          "item/Title": "@concat(outputs('Obtener_contrato')?['body/Title'], ' - N', string(items('Recorrer_niveles')), ' - C', string(outputs('Ciclo_actual')))",
+                          "item/ContratoId": "@triggerBody()['number']",
+                          "item/Nivel": "@items('Recorrer_niveles')",
+                          "item/Ciclo": "@outputs('Ciclo_actual')",
+                          "item/RolAprobador": "@outputs('Regla')?['RolAprobador']?['Value']",
+                          "item/Decision/Value": "Pendiente",
+                          "item/FechaSolicitud": "@utcNow()",
+                          "item/InstanciaFlujo": "@workflow()['run']['name']"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    },
+                    "Actualizar_nivel_actual": {
+                      "type": "OpenApiConnection",
+                      "runAfter": { "Crear_tarea_de_aprobacion": ["Succeeded"] },
+                      "inputs": {
+                        "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                        "parameters": {
+                          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                          "table": "Contratos",
+                          "id": "@triggerBody()['number']",
+                          "item/NivelAprobacionActual": "@items('Recorrer_niveles')"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    },
+                    "Detalle_de_la_solicitud": {
+                      "type": "Compose",
+                      "runAfter": { "Actualizar_nivel_actual": ["Succeeded"] },
+                      "inputs": "@concat('**Contrato:** ', coalesce(outputs('Obtener_contrato')?['body/Title'], '(sin codigo)'), ' - ', outputs('Obtener_contrato')?['body/NombreContrato'], '\n\n', '**Tipo:** ', outputs('Obtener_contrato')?['body/TipoContrato/Value'], '\n', '**Contraparte:** ', outputs('Obtener_contrato')?['body/Contraparte'], '\n', '**Monto:** ', outputs('Obtener_contrato')?['body/Moneda/Value'], ' ', string(coalesce(outputs('Obtener_contrato')?['body/Monto'], 0)), '  (equivalente ', string(outputs('Monto_en_moneda_base')), ' en moneda base)', '\n', '**Vigencia:** ', formatDateTime(outputs('Obtener_contrato')?['body/FechaInicio'], 'dd/MM/yyyy'), ' al ', if(empty(coalesce(outputs('Obtener_contrato')?['body/FechaFin'], '')), 'indefinida', formatDateTime(outputs('Obtener_contrato')?['body/FechaFin'], 'dd/MM/yyyy')), '\n', '**Area solicitante:** ', coalesce(body('Obtener_area')?['Title'], ''), '\n\n', '**Objeto:** ', coalesce(outputs('Obtener_contrato')?['body/ObjetoContrato'], '-'), '\n\n', '---\n', 'Nivel ', string(items('Recorrer_niveles')), ' de ', string(length(outputs('Niveles'))), ' - Rol: ', outputs('Regla')?['RolAprobador']?['Value'])"
+                    },
+                    "Solicitar_aprobacion": {
+                      "type": "OpenApiConnectionWebhook",
+                      "runAfter": { "Detalle_de_la_solicitud": ["Succeeded"] },
+                      "description": "Accion de espera: el flujo queda suspendido hasta que el aprobador responde.",
+                      "inputs": {
+                        "host": { "connectionName": "shared_approvals", "operationId": "StartAndWaitForAnApproval", "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals" },
+                        "parameters": {
+                          "approvalType": "Basic",
+                          "ApprovalCreationInput/title": "@concat('Aprobacion de contrato ', coalesce(outputs('Obtener_contrato')?['body/Title'], ''), ' - Nivel ', string(items('Recorrer_niveles')))",
+                          "ApprovalCreationInput/assignedTo": "@outputs('Aprobador')",
+                          "ApprovalCreationInput/details": "@outputs('Detalle_de_la_solicitud')",
+                          "ApprovalCreationInput/itemLink": "@outputs('Enlace_al_contrato')",
+                          "ApprovalCreationInput/itemLinkDescription": "Abrir el contrato en SharePoint"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    },
+                    "Registrar_decision": {
+                      "type": "OpenApiConnection",
+                      "runAfter": { "Solicitar_aprobacion": ["Succeeded"] },
+                      "inputs": {
+                        "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                        "parameters": {
+                          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                          "table": "Aprobaciones",
+                          "id": "@body('Crear_tarea_de_aprobacion')?['ID']",
+                          "item/Decision/Value": "@if(equals(body('Solicitar_aprobacion')?['outcome'], 'Approve'), 'Aprobado', 'Rechazado')",
+                          "item/Comentarios": "@coalesce(body('Solicitar_aprobacion')?['responses']?[0]?['comments'], '')",
+                          "item/ResueltoPor/Claims": "@concat('i:0#.f|membership|', coalesce(body('Solicitar_aprobacion')?['responses']?[0]?['responder']?['email'], outputs('Aprobador')))",
+                          "item/FechaDecision": "@utcNow()",
+                          "item/HorasTranscurridas": "@div(float(sub(ticks(utcNow()), ticks(body('Crear_tarea_de_aprobacion')?['FechaSolicitud']))), 36000000000.0)"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      }
+                    },
+                    "Si_fue_rechazado": {
+                      "type": "If",
+                      "runAfter": { "Registrar_decision": ["Succeeded"] },
+                      "expression": { "not": { "equals": [ "@body('Solicitar_aprobacion')?['outcome']", "Approve" ] } },
+                      "actions": {
+                        "Marcar_rechazado": {
+                          "type": "SetVariable",
+                          "inputs": { "name": "varRechazado", "value": true }
+                        },
+                        "Guardar_motivo": {
+                          "type": "SetVariable",
+                          "runAfter": { "Marcar_rechazado": ["Succeeded"] },
+                          "inputs": {
+                            "name": "varMotivo",
+                            "value": "@concat('Rechazado en el nivel ', string(items('Recorrer_niveles')), ' (', outputs('Regla')?['RolAprobador']?['Value'], ') por ', coalesce(body('Solicitar_aprobacion')?['responses']?[0]?['responder']?['displayName'], outputs('Aprobador')), '. Comentario: ', coalesce(body('Solicitar_aprobacion')?['responses']?[0]?['comments'], '(sin comentario)'))"
+                          }
+                        }
+                      },
+                      "else": { "actions": {} }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Si_el_nivel_es_obligatorio": {
+                        "type": "If",
+                        "description": "Un nivel obligatorio sin aprobador detiene la cadena; uno opcional se omite y deja constancia.",
+                        "expression": { "equals": [ "@outputs('Regla')?['Obligatorio']", true ] },
+                        "actions": {
+                          "Detener_por_falta_de_aprobador": {
+                            "type": "SetVariable",
+                            "inputs": { "name": "varRechazado", "value": true }
+                          },
+                          "Motivo_falta_de_aprobador": {
+                            "type": "SetVariable",
+                            "runAfter": { "Detener_por_falta_de_aprobador": ["Succeeded"] },
+                            "inputs": {
+                              "name": "varMotivo",
+                              "value": "@concat('No se pudo resolver el aprobador obligatorio del nivel ', string(items('Recorrer_niveles')), ' (rol: ', outputs('Regla')?['RolAprobador']?['Value'], '). Revisa la regla en MatrizAprobacion o el Responsable/Gerente del area solicitante.')"
+                            }
+                          },
+                          "Avisar_al_administrador": {
+                            "type": "OpenApiConnection",
+                            "runAfter": { "Motivo_falta_de_aprobador": ["Succeeded"] },
+                            "inputs": {
+                              "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                              "parameters": {
+                                "emailMessage/To": "@outputs('Correo_admin')",
+                                "emailMessage/Subject": "@concat('[Contratos] Configuracion incompleta - ', coalesce(outputs('Obtener_contrato')?['body/Title'], ''))",
+                                "emailMessage/Body": "<p>El contrato <b>@{coalesce(outputs('Obtener_contrato')?['body/Title'], '')}</b> no pudo avanzar en el workflow de aprobacion.</p><p>@{variables('varMotivo')}</p><p><a href=\"@{outputs('Enlace_al_contrato')}\">Abrir el contrato</a></p>",
+                                "emailMessage/Importance": "High"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {
+                            "Registrar_nivel_omitido": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                                "parameters": {
+                                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                                  "table": "Aprobaciones",
+                                  "item/Title": "@concat(outputs('Obtener_contrato')?['body/Title'], ' - N', string(items('Recorrer_niveles')), ' - C', string(outputs('Ciclo_actual')))",
+                                  "item/ContratoId": "@triggerBody()['number']",
+                                  "item/Nivel": "@items('Recorrer_niveles')",
+                                  "item/Ciclo": "@outputs('Ciclo_actual')",
+                                  "item/RolAprobador": "@outputs('Regla')?['RolAprobador']?['Value']",
+                                  "item/Decision/Value": "Omitido",
+                                  "item/Comentarios": "Nivel opcional sin aprobador resuelto. Se omitio automaticamente.",
+                                  "item/FechaSolicitud": "@utcNow()",
+                                  "item/FechaDecision": "@utcNow()",
+                                  "item/InstanciaFlujo": "@workflow()['run']['name']"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "else": { "actions": {} }
+            }
+          }
+        },
+
+        "Cerrar_el_workflow": {
+          "type": "If",
+          "runAfter": { "Recorrer_niveles": ["Succeeded"] },
+          "expression": { "equals": [ "@variables('varRechazado')", false ] },
+          "actions": {
+            "Aprobar_contrato": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Contratos",
+                  "id": "@triggerBody()['number']",
+                  "item/Estado/Value": "Aprobado",
+                  "item/FechaAprobacionFinal": "@utcNow()",
+                  "item/NivelAprobacionActual": "@length(outputs('Niveles'))"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Bitacora_aprobado": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Aprobar_contrato": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Bitacora",
+                  "item/Title": "@concat(outputs('Obtener_contrato')?['body/Title'], ' - Aprobacion final')",
+                  "item/ContratoId": "@triggerBody()['number']",
+                  "item/Accion": "Aprobacion final",
+                  "item/Fecha": "@utcNow()",
+                  "item/Detalle": "@concat('Aprobado en los ', string(length(outputs('Niveles'))), ' niveles requeridos. Ciclo ', string(outputs('Ciclo_actual')), '.')"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Avisar_aprobacion_al_solicitante": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Bitacora_aprobado": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                "parameters": {
+                  "emailMessage/To": "@coalesce(outputs('Obtener_contrato')?['body/Solicitante/Email'], outputs('Correo_admin'))",
+                  "emailMessage/Subject": "@concat('[Contratos] Aprobado: ', coalesce(outputs('Obtener_contrato')?['body/Title'], ''), ' - ', outputs('Obtener_contrato')?['body/NombreContrato'])",
+                  "emailMessage/Body": "<p>El contrato <b>@{coalesce(outputs('Obtener_contrato')?['body/Title'], '')}</b> (@{outputs('Obtener_contrato')?['body/NombreContrato']}) completo los @{length(outputs('Niveles'))} niveles de aprobacion.</p><p>Contraparte: @{outputs('Obtener_contrato')?['body/Contraparte']}<br>Monto: @{outputs('Obtener_contrato')?['body/Moneda/Value']} @{coalesce(outputs('Obtener_contrato')?['body/Monto'], 0)}</p><p>Si la firma electronica esta habilitada, el sobre de DocuSign se enviara automaticamente.</p><p><a href=\"@{outputs('Enlace_al_contrato')}\">Abrir el contrato</a></p>"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Rechazar_contrato": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                  "parameters": {
+                    "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                    "table": "Contratos",
+                    "id": "@triggerBody()['number']",
+                    "item/Estado/Value": "Rechazado",
+                    "item/MotivoRechazo": "@variables('varMotivo')"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Bitacora_rechazado": {
+                "type": "OpenApiConnection",
+                "runAfter": { "Rechazar_contrato": ["Succeeded"] },
+                "inputs": {
+                  "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                  "parameters": {
+                    "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                    "table": "Bitacora",
+                    "item/Title": "@concat(outputs('Obtener_contrato')?['body/Title'], ' - Rechazo')",
+                    "item/ContratoId": "@triggerBody()['number']",
+                    "item/Accion": "Rechazo",
+                    "item/Fecha": "@utcNow()",
+                    "item/Detalle": "@variables('varMotivo')"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Avisar_rechazo_al_solicitante": {
+                "type": "OpenApiConnection",
+                "runAfter": { "Bitacora_rechazado": ["Succeeded"] },
+                "inputs": {
+                  "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                  "parameters": {
+                    "emailMessage/To": "@coalesce(outputs('Obtener_contrato')?['body/Solicitante/Email'], outputs('Correo_admin'))",
+                    "emailMessage/Subject": "@concat('[Contratos] Rechazado: ', coalesce(outputs('Obtener_contrato')?['body/Title'], ''), ' - ', outputs('Obtener_contrato')?['body/NombreContrato'])",
+                    "emailMessage/Body": "<p>El contrato <b>@{coalesce(outputs('Obtener_contrato')?['body/Title'], '')}</b> fue rechazado.</p><p>@{variables('varMotivo')}</p><p>Corrige lo observado y vuelve a enviarlo a aprobacion desde la aplicacion. El reenvio abre un ciclo nuevo y conserva el historial del anterior.</p><p><a href=\"@{outputs('Enlace_al_contrato')}\">Abrir el contrato</a></p>",
+                    "emailMessage/Importance": "High"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Avisar_que_no_hay_matriz": {
+            "type": "OpenApiConnection",
+            "inputs": {
+              "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+              "parameters": {
+                "emailMessage/To": "@outputs('Correo_admin')",
+                "emailMessage/Subject": "[Contratos] No hay reglas de aprobacion aplicables",
+                "emailMessage/Body": "<p>El contrato <b>@{coalesce(outputs('Obtener_contrato')?['body/Title'], '')}</b> no encontro ninguna regla activa en <b>MatrizAprobacion</b>.</p><p>Tipo: @{outputs('Obtener_contrato')?['body/TipoContrato/Value']}<br>Monto en moneda base: @{outputs('Monto_en_moneda_base')}</p><p>Revisa que exista un tramo que cubra ese monto para ese tipo de contrato.</p>",
+                "emailMessage/Importance": "High"
+              },
+              "authentication": "@parameters('$authentication')"
+            }
+          },
+          "Responder_sin_reglas": {
+            "type": "Response",
+            "kind": "PowerApp",
+            "runAfter": { "Avisar_que_no_hay_matriz": ["Succeeded"] },
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "Resultado": "Error",
+                "Mensaje": "No hay reglas de aprobacion configuradas para este tipo de contrato y monto. Se notifico al administrador.",
+                "NivelesRequeridos": 0
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Resultado": { "type": "string" },
+                  "Mensaje": { "type": "string" },
+                  "NivelesRequeridos": { "type": "integer" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

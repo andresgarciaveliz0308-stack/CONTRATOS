@@ -1,0 +1,209 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Asigna el codigo correlativo CTR-AAAA-NNNN a cada contrato nuevo. La concurrencia del disparador esta fijada en 1 para que dos altas simultaneas no reciban el mismo numero.",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+  },
+  "triggers": {
+    "Cuando_se_crea_un_contrato": {
+      "type": "OpenApiConnection",
+      "description": "Se dispara al crear un elemento en la lista Contratos.",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "OnNewItems",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Contratos"
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "recurrence": { "frequency": "Minute", "interval": 1 },
+      "runtimeConfiguration": {
+        "concurrency": { "runs": 1 }
+      },
+      "splitOn": "@triggerOutputs()?['body/value']"
+    }
+  },
+  "actions": {
+    "Solo_si_no_tiene_codigo": {
+      "type": "If",
+      "description": "Si el codigo ya viene informado (carga masiva o migracion), no se toca.",
+      "expression": {
+        "equals": [
+          "@empty(coalesce(triggerOutputs()?['body/Title'], ''))",
+          true
+        ]
+      },
+      "actions": {
+        "Anio_actual": {
+          "type": "Compose",
+          "description": "Anio en la zona horaria de Lima. Ajustar si la organizacion opera en otra.",
+          "inputs": "@formatDateTime(convertFromUtc(utcNow(), 'SA Pacific Standard Time'), 'yyyy')"
+        },
+        "Clave_del_correlativo": {
+          "type": "Compose",
+          "runAfter": { "Anio_actual": ["Succeeded"] },
+          "inputs": "@concat('ULTIMO_CORRELATIVO_', outputs('Anio_actual'))"
+        },
+        "Leer_prefijo": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Clave_del_correlativo": ["Succeeded"] },
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "Parametros",
+              "$filter": "Title eq 'PREFIJO_CODIGO'",
+              "$top": 1
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Prefijo": {
+          "type": "Compose",
+          "runAfter": { "Leer_prefijo": ["Succeeded"] },
+          "description": "Si el parametro no existe, se usa CTR.",
+          "inputs": "@if(empty(body('Leer_prefijo')?['value']), 'CTR', first(body('Leer_prefijo')?['value'])?['Valor'])"
+        },
+        "Leer_correlativo": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Prefijo": ["Succeeded"] },
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "Parametros",
+              "$filter": "Title eq '@{outputs('Clave_del_correlativo')}'",
+              "$top": 1
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Siguiente_numero": {
+          "type": "Compose",
+          "runAfter": { "Leer_correlativo": ["Succeeded"] },
+          "description": "Primer contrato del anio = 1. Si no, el ultimo mas uno.",
+          "inputs": "@if(empty(body('Leer_correlativo')?['value']), 1, add(int(first(body('Leer_correlativo')?['value'])?['Valor']), 1))"
+        },
+        "Guardar_correlativo": {
+          "type": "If",
+          "runAfter": { "Siguiente_numero": ["Succeeded"] },
+          "description": "Crea el parametro del anio la primera vez; despues solo lo actualiza.",
+          "expression": {
+            "equals": [ "@empty(body('Leer_correlativo')?['value'])", true ]
+          },
+          "actions": {
+            "Crear_parametro_del_anio": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PostItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Parametros",
+                  "item/Title": "@outputs('Clave_del_correlativo')",
+                  "item/Valor": "@string(outputs('Siguiente_numero'))",
+                  "item/Tipo/Value": "Numero",
+                  "item/Descripcion": "Ultimo correlativo asignado en el anio. Lo mantiene el flujo 05; no editar a mano."
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Actualizar_parametro_del_anio": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_sharepointonline",
+                    "operationId": "PatchItem",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                  },
+                  "parameters": {
+                    "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                    "table": "Parametros",
+                    "id": "@first(body('Leer_correlativo')?['value'])?['ID']",
+                    "item/Title": "@outputs('Clave_del_correlativo')",
+                    "item/Valor": "@string(outputs('Siguiente_numero'))"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            }
+          }
+        },
+        "Codigo_del_contrato": {
+          "type": "Compose",
+          "runAfter": { "Guardar_correlativo": ["Succeeded"] },
+          "description": "Correlativo a 4 digitos: CTR-2026-0042.",
+          "inputs": "@concat(outputs('Prefijo'), '-', outputs('Anio_actual'), '-', substring(concat('0000', string(outputs('Siguiente_numero'))), sub(length(concat('0000', string(outputs('Siguiente_numero')))), 4), 4))"
+        },
+        "Calcular_fecha_de_preaviso": {
+          "type": "Compose",
+          "runAfter": { "Codigo_del_contrato": ["Succeeded"] },
+          "description": "FechaFin menos los dias de preaviso. Vacio si el contrato es de vigencia indefinida o no tiene fecha de fin.",
+          "inputs": "@if(or(equals(triggerOutputs()?['body/VigenciaIndefinida'], true), empty(coalesce(triggerOutputs()?['body/FechaFin'], ''))), null, addDays(triggerOutputs()?['body/FechaFin'], mul(-1, int(coalesce(triggerOutputs()?['body/DiasPreaviso'], 30))), 'yyyy-MM-dd'))"
+        },
+        "Asignar_codigo_al_contrato": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Calcular_fecha_de_preaviso": ["Succeeded"] },
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PatchItem",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "Contratos",
+              "id": "@triggerOutputs()?['body/ID']",
+              "item/Title": "@outputs('Codigo_del_contrato')",
+              "item/FechaPreaviso": "@outputs('Calcular_fecha_de_preaviso')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Registrar_en_bitacora": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Asignar_codigo_al_contrato": ["Succeeded"] },
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "PostItem",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "Bitacora",
+              "item/Title": "@concat(outputs('Codigo_del_contrato'), ' - Creacion')",
+              "item/ContratoId": "@triggerOutputs()?['body/ID']",
+              "item/Accion": "Creacion",
+              "item/Fecha": "@utcNow()",
+              "item/Detalle": "@concat('Contrato registrado. Codigo asignado automaticamente: ', outputs('Codigo_del_contrato'), '.')"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "else": { "actions": {} }
+    }
+  },
+  "outputs": {}
+}

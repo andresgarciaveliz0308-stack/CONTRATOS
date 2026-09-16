@@ -1,0 +1,134 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Ejecucion diaria. Detecta los documentos originales prestados cuyo compromiso de devolucion ya vencio y reclama la devolucion a quien lo tiene, con copia al custodio. Reitera cada 7 dias de atraso, no todos los dias.",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+  },
+  "triggers": {
+    "Cada_dia_a_las_9": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "timeZone": "SA Pacific Standard Time",
+        "schedule": { "hours": ["9"], "minutes": [0] }
+      }
+    }
+  },
+  "actions": {
+    "Obtener_correo_admin": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Parametros",
+          "$filter": "Title eq 'CORREO_ADMIN_CONTRATOS'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Correo_admin": {
+      "type": "Compose",
+      "runAfter": { "Obtener_correo_admin": ["Succeeded"] },
+      "inputs": "@if(empty(body('Obtener_correo_admin')?['value']), '', first(body('Obtener_correo_admin')?['value'])?['Valor'])"
+    },
+    "Obtener_prestamos_vencidos": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Correo_admin": ["Succeeded"] },
+      "description": "Prestamos sin devolucion registrada cuyo compromiso ya paso. Ambas columnas estan indexadas.",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "MovimientosCustodia",
+          "$filter": "TipoMovimiento eq 'Prestamo' and FechaDevolucionReal eq null and FechaCompromisoDevolucion ne null and FechaCompromisoDevolucion lt '@{formatDateTime(utcNow(), 'yyyy-MM-dd')}'",
+          "$orderby": "FechaCompromisoDevolucion asc",
+          "$top": 1000
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Reclamar_cada_prestamo": {
+      "type": "Foreach",
+      "runAfter": { "Obtener_prestamos_vencidos": ["Succeeded"] },
+      "foreach": "@body('Obtener_prestamos_vencidos')?['value']",
+      "runtimeConfiguration": { "concurrency": { "repetitions": 4 } },
+      "actions": {
+        "Dias_de_atraso": {
+          "type": "Compose",
+          "inputs": "@div(sub(ticks(startOfDay(utcNow())), ticks(startOfDay(items('Reclamar_cada_prestamo')?['FechaCompromisoDevolucion']))), 864000000000)"
+        },
+        "Toca_reiterar": {
+          "type": "Compose",
+          "runAfter": { "Dias_de_atraso": ["Succeeded"] },
+          "description": "El primer dia de atraso y luego una vez por semana, para no saturar el buzon del usuario.",
+          "inputs": "@or(equals(outputs('Dias_de_atraso'), 1), equals(mod(outputs('Dias_de_atraso'), 7), 0))"
+        },
+        "Si_toca_reiterar": {
+          "type": "If",
+          "runAfter": { "Toca_reiterar": ["Succeeded"] },
+          "expression": {
+            "and": [
+              { "equals": [ "@outputs('Toca_reiterar')", true ] },
+              { "greater": [ "@outputs('Dias_de_atraso')", 0 ] }
+            ]
+          },
+          "actions": {
+            "Obtener_contrato_del_prestamo": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Contratos",
+                  "id": "@items('Reclamar_cada_prestamo')?['Contrato']?['Id']"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Reclamar_devolucion": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Obtener_contrato_del_prestamo": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                "parameters": {
+                  "emailMessage/To": "@coalesce(items('Reclamar_cada_prestamo')?['SolicitadoPor']?['Email'], outputs('Correo_admin'))",
+                  "emailMessage/Cc": "@coalesce(body('Obtener_contrato_del_prestamo')?['Custodio']?['Email'], outputs('Correo_admin'))",
+                  "emailMessage/Subject": "@concat('[Contratos] Devolucion pendiente del original ', coalesce(body('Obtener_contrato_del_prestamo')?['Title'], ''), ' (', string(outputs('Dias_de_atraso')), ' dias de atraso)')",
+                  "emailMessage/Body": "<p>Tienes en tu poder el documento original del contrato <b>@{coalesce(body('Obtener_contrato_del_prestamo')?['Title'], '')}</b> - @{body('Obtener_contrato_del_prestamo')?['NombreContrato']}.</p><table cellpadding=\"6\" style=\"border-collapse:collapse\"><tr><td><b>Prestado el</b></td><td>@{formatDateTime(items('Reclamar_cada_prestamo')?['FechaMovimiento'], 'dd/MM/yyyy')}</td></tr><tr><td><b>Comprometido para</b></td><td>@{formatDateTime(items('Reclamar_cada_prestamo')?['FechaCompromisoDevolucion'], 'dd/MM/yyyy')}</td></tr><tr><td><b>Dias de atraso</b></td><td>@{outputs('Dias_de_atraso')}</td></tr><tr><td><b>Ubicacion de origen</b></td><td>@{coalesce(items('Reclamar_cada_prestamo')?['UbicacionOrigen'], '-')}</td></tr></table><p>Por favor devuelvelo al archivo y registra la devolucion en la aplicacion de Contratos, o coordina una nueva fecha con el custodio.</p>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Registrar_reclamo": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Reclamar_devolucion": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Alertas",
+                  "item/Title": "@concat(coalesce(body('Obtener_contrato_del_prestamo')?['Title'], 'S/C'), ' - Prestamo vencido - ', string(outputs('Dias_de_atraso')), 'd')",
+                  "item/ContratoId": "@items('Reclamar_cada_prestamo')?['Contrato']?['Id']",
+                  "item/TipoAlerta/Value": "Prestamo vencido",
+                  "item/DiasAnticipacion": "@mul(outputs('Dias_de_atraso'), -1)",
+                  "item/FechaEnvio": "@utcNow()",
+                  "item/Destinatarios": "@coalesce(items('Reclamar_cada_prestamo')?['SolicitadoPor']?['Email'], outputs('Correo_admin'))",
+                  "item/Canal/Value": "Correo"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": { "actions": {} }
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

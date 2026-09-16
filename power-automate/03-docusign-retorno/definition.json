@@ -1,0 +1,257 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Escucha los cambios de estado de los sobres de DocuSign. Cuando un sobre se completa, descarga el PDF firmado, lo archiva en la biblioteca de custodia y pone el contrato en Vigente. Si el sobre se rechaza o se anula, devuelve el contrato al estado correspondiente.",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+  },
+  "triggers": {
+    "Cuando_cambia_el_estado_de_un_sobre": {
+      "type": "OpenApiConnectionWebhook",
+      "description": "VERIFICAR EN EL DISENADOR: 'Cuando cambia el estado de un sobre'. Ver docs/07-docusign.md.",
+      "inputs": {
+        "host": { "connectionName": "shared_docusign", "operationId": "OnEnvelopeStatusChange", "apiId": "/providers/Microsoft.PowerApps/apis/shared_docusign" },
+        "parameters": {
+          "accountId": "DOCUSIGN_ACCOUNT_ID",
+          "envelopeStatus": "any"
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    }
+  },
+  "actions": {
+    "Id_del_sobre": {
+      "type": "Compose",
+      "inputs": "@coalesce(triggerOutputs()?['body/envelopeId'], triggerOutputs()?['body/EnvelopeId'], '')"
+    },
+    "Estado_del_sobre": {
+      "type": "Compose",
+      "runAfter": { "Id_del_sobre": ["Succeeded"] },
+      "inputs": "@toLower(coalesce(triggerOutputs()?['body/status'], triggerOutputs()?['body/Status'], ''))"
+    },
+    "Buscar_contrato_del_sobre": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Estado_del_sobre": ["Succeeded"] },
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Contratos",
+          "$filter": "DocuSignEnvelopeId eq '@{outputs('Id_del_sobre')}'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Si_el_sobre_corresponde_a_un_contrato": {
+      "type": "If",
+      "runAfter": { "Buscar_contrato_del_sobre": ["Succeeded"] },
+      "description": "Un sobre enviado desde fuera de esta aplicacion se ignora en silencio.",
+      "expression": { "not": { "equals": [ "@empty(body('Buscar_contrato_del_sobre')?['value'])", true ] } },
+      "actions": {
+        "Contrato": {
+          "type": "Compose",
+          "inputs": "@first(body('Buscar_contrato_del_sobre')?['value'])"
+        },
+        "Segun_el_estado_del_sobre": {
+          "type": "Switch",
+          "runAfter": { "Contrato": ["Succeeded"] },
+          "expression": "@outputs('Estado_del_sobre')",
+          "cases": {
+
+            "Completado": {
+              "case": "completed",
+              "actions": {
+                "Descargar_documento_firmado": {
+                  "type": "OpenApiConnection",
+                  "description": "VERIFICAR EN EL DISENADOR: 'Obtener el documento combinado'. Devuelve todos los documentos del sobre en un solo PDF con el certificado de firma.",
+                  "inputs": {
+                    "host": { "connectionName": "shared_docusign", "operationId": "GetCombinedDocument", "apiId": "/providers/Microsoft.PowerApps/apis/shared_docusign" },
+                    "parameters": {
+                      "accountId": "DOCUSIGN_ACCOUNT_ID",
+                      "envelopeId": "@outputs('Id_del_sobre')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Nombre_del_archivo_firmado": {
+                  "type": "Compose",
+                  "runAfter": { "Descargar_documento_firmado": ["Succeeded"] },
+                  "inputs": "@concat(coalesce(outputs('Contrato')?['Title'], 'SIN-CODIGO'), '_Firmado_', formatDateTime(utcNow(), 'yyyyMMdd'), '.pdf')"
+                },
+                "Archivar_documento_firmado": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Nombre_del_archivo_firmado": ["Succeeded"] },
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "CreateFile", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "folderPath": "/DocumentosContratos",
+                      "name": "@outputs('Nombre_del_archivo_firmado')",
+                      "body": "@body('Descargar_documento_firmado')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Etiquetar_documento_firmado": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Archivar_documento_firmado": ["Succeeded"] },
+                  "description": "Sin estos metadatos el PDF no queda vinculado al expediente del contrato.",
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "DocumentosContratos",
+                      "id": "@body('Archivar_documento_firmado')?['ItemId']",
+                      "item/ContratoId": "@outputs('Contrato')?['ID']",
+                      "item/TipoDocumento/Value": "Sobre firmado",
+                      "item/VersionDocumento": "Firmado",
+                      "item/FechaDocumento": "@utcNow()",
+                      "item/EstaFirmado": true,
+                      "item/EsPrincipal": false
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Poner_contrato_vigente": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Etiquetar_documento_firmado": ["Succeeded"] },
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Contratos",
+                      "id": "@outputs('Contrato')?['ID']",
+                      "item/Estado/Value": "Vigente",
+                      "item/DocuSignEstado/Value": "Completado",
+                      "item/FechaFirma": "@utcNow()",
+                      "item/EstadoCustodia/Value": "@if(equals(coalesce(outputs('Contrato')?['EstadoCustodia']?['Value'], ''), 'Pendiente de recepcion'), 'Solo digital', coalesce(outputs('Contrato')?['EstadoCustodia']?['Value'], 'Solo digital'))"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Bitacora_firma": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Poner_contrato_vigente": ["Succeeded"] },
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Bitacora",
+                      "item/Title": "@concat(coalesce(outputs('Contrato')?['Title'], ''), ' - Firma completada')",
+                      "item/ContratoId": "@outputs('Contrato')?['ID']",
+                      "item/Accion": "Firma completada",
+                      "item/Fecha": "@utcNow()",
+                      "item/Detalle": "@concat('Sobre ', outputs('Id_del_sobre'), ' completado. Documento firmado archivado como ', outputs('Nombre_del_archivo_firmado'), '. El contrato paso a Vigente.')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Avisar_firma_completada": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Bitacora_firma": ["Succeeded"] },
+                  "inputs": {
+                    "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                    "parameters": {
+                      "emailMessage/To": "@coalesce(outputs('Contrato')?['ResponsableContrato']?['Email'], outputs('Contrato')?['Solicitante']?['Email'], '')",
+                      "emailMessage/Subject": "@concat('[Contratos] Firmado y vigente: ', coalesce(outputs('Contrato')?['Title'], ''), ' - ', outputs('Contrato')?['NombreContrato'])",
+                      "emailMessage/Body": "<p>Todas las partes firmaron el contrato <b>@{coalesce(outputs('Contrato')?['Title'], '')}</b> con @{outputs('Contrato')?['Contraparte']}.</p><p>El PDF firmado quedo archivado en la biblioteca de custodia y el contrato esta <b>Vigente</b>.</p><p><b>Recuerda:</b> si existe un original en papel, registra su recepcion en el modulo de custodia para completar el expediente.</p><p><a href=\"@{concat('https://CONTOSO.sharepoint.com/sites/Contratos/Lists/Contratos/DispForm.aspx?ID=', string(outputs('Contrato')?['ID']))}\">Abrir el contrato</a></p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            },
+
+            "Rechazado": {
+              "case": "declined",
+              "actions": {
+                "Marcar_firma_rechazada": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Contratos",
+                      "id": "@outputs('Contrato')?['ID']",
+                      "item/Estado/Value": "Rechazado",
+                      "item/DocuSignEstado/Value": "Rechazado",
+                      "item/MotivoRechazo": "@concat('Un firmante rechazo el sobre de DocuSign ', outputs('Id_del_sobre'), '. Revisa el detalle en DocuSign.')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Avisar_firma_rechazada": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Marcar_firma_rechazada": ["Succeeded"] },
+                  "inputs": {
+                    "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                    "parameters": {
+                      "emailMessage/To": "@coalesce(outputs('Contrato')?['Solicitante']?['Email'], outputs('Contrato')?['ResponsableContrato']?['Email'], '')",
+                      "emailMessage/Subject": "@concat('[Contratos] Firma rechazada: ', coalesce(outputs('Contrato')?['Title'], ''))",
+                      "emailMessage/Body": "<p>Un firmante rechazo el sobre del contrato <b>@{coalesce(outputs('Contrato')?['Title'], '')}</b>.</p><p>El contrato volvio al estado <b>Rechazado</b>. Revisa el motivo en DocuSign, corrige el documento y vuelve a enviarlo a aprobacion.</p>",
+                      "emailMessage/Importance": "High"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            },
+
+            "Anulado": {
+              "case": "voided",
+              "actions": {
+                "Marcar_sobre_anulado": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Contratos",
+                      "id": "@outputs('Contrato')?['ID']",
+                      "item/Estado/Value": "Aprobado",
+                      "item/DocuSignEstado/Value": "No enviado",
+                      "item/DocuSignEnvelopeId": ""
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            },
+
+            "Entregado": {
+              "case": "delivered",
+              "actions": {
+                "Marcar_entregado": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Contratos",
+                      "id": "@outputs('Contrato')?['ID']",
+                      "item/DocuSignEstado/Value": "Entregado"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "actions": {
+              "Sin_accion_para_este_estado": {
+                "type": "Compose",
+                "description": "Estados intermedios (sent, created) no requieren accion; se registran para la traza del flujo.",
+                "inputs": "@concat('Estado de sobre sin accion asociada: ', outputs('Estado_del_sobre'))"
+              }
+            }
+          }
+        }
+      },
+      "else": { "actions": {} }
+    }
+  },
+  "outputs": {}
+}

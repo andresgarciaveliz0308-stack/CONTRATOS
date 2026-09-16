@@ -1,0 +1,248 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Al quedar aprobado un contrato, arma el sobre de DocuSign con el documento marcado como principal, agrega a los firmantes y lo envia. El contrato pasa a 'En firma'. Las dos guardas del disparador (Estado Aprobado + DocuSign No enviado) evitan que el flujo se auto-dispare con sus propias escrituras.",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+  },
+  "triggers": {
+    "Cuando_se_modifica_un_contrato": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "OnUpdatedItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Contratos"
+        },
+        "authentication": "@parameters('$authentication')"
+      },
+      "recurrence": { "frequency": "Minute", "interval": 3 },
+      "splitOn": "@triggerOutputs()?['body/value']"
+    }
+  },
+  "actions": {
+    "Obtener_interruptor_docusign": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Parametros",
+          "$filter": "Title eq 'DOCUSIGN_HABILITADO'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Docusign_habilitado": {
+      "type": "Compose",
+      "runAfter": { "Obtener_interruptor_docusign": ["Succeeded"] },
+      "inputs": "@and(not(empty(body('Obtener_interruptor_docusign')?['value'])), equals(toLower(first(body('Obtener_interruptor_docusign')?['value'])?['Valor']), 'true'))"
+    },
+    "Obtener_correo_admin": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Docusign_habilitado": ["Succeeded"] },
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Parametros",
+          "$filter": "Title eq 'CORREO_ADMIN_CONTRATOS'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Correo_admin": {
+      "type": "Compose",
+      "runAfter": { "Obtener_correo_admin": ["Succeeded"] },
+      "inputs": "@if(empty(body('Obtener_correo_admin')?['value']), '', first(body('Obtener_correo_admin')?['value'])?['Valor'])"
+    },
+
+    "Si_corresponde_enviar_a_firma": {
+      "type": "If",
+      "runAfter": { "Correo_admin": ["Succeeded"] },
+      "expression": {
+        "and": [
+          { "equals": [ "@triggerOutputs()?['body/Estado/Value']", "Aprobado" ] },
+          { "equals": [ "@coalesce(triggerOutputs()?['body/DocuSignEstado/Value'], 'No enviado')", "No enviado" ] },
+          { "equals": [ "@outputs('Docusign_habilitado')", true ] }
+        ]
+      },
+      "actions": {
+
+        "Buscar_documento_principal": {
+          "type": "OpenApiConnection",
+          "description": "El PDF marcado con 'Es documento principal' es el que se firma.",
+          "inputs": {
+            "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "DocumentosContratos",
+              "$filter": "ContratoId eq @{triggerOutputs()?['body/ID']} and EsPrincipal eq 1",
+              "$top": 1
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+
+        "Si_hay_documento_principal": {
+          "type": "If",
+          "runAfter": { "Buscar_documento_principal": ["Succeeded"] },
+          "expression": { "not": { "equals": [ "@empty(body('Buscar_documento_principal')?['value'])", true ] } },
+          "actions": {
+
+            "Documento": {
+              "type": "Compose",
+              "inputs": "@first(body('Buscar_documento_principal')?['value'])"
+            },
+            "Obtener_contenido_del_documento": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Documento": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "GetFileContent", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "id": "@outputs('Documento')?['{Identifier}']"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+
+            "Crear_sobre": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Obtener_contenido_del_documento": ["Succeeded"] },
+              "description": "VERIFICAR EN EL DISENADOR: los operationId del conector de DocuSign cambian entre versiones. Ver docs/07-docusign.md.",
+              "inputs": {
+                "host": { "connectionName": "shared_docusign", "operationId": "CreateBlankEnvelope", "apiId": "/providers/Microsoft.PowerApps/apis/shared_docusign" },
+                "parameters": {
+                  "accountId": "DOCUSIGN_ACCOUNT_ID",
+                  "envelopeDefinition/emailSubject": "@concat('Firma del contrato ', coalesce(triggerOutputs()?['body/Title'], ''), ' - ', triggerOutputs()?['body/NombreContrato'])",
+                  "envelopeDefinition/emailBlurb": "@concat('Se solicita tu firma para el contrato con ', triggerOutputs()?['body/Contraparte'], '. Cualquier consulta, responde a ', outputs('Correo_admin'), '.')",
+                  "envelopeDefinition/status": "created"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Adjuntar_documento_al_sobre": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Crear_sobre": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_docusign", "operationId": "AddDocumentToEnvelope", "apiId": "/providers/Microsoft.PowerApps/apis/shared_docusign" },
+                "parameters": {
+                  "accountId": "DOCUSIGN_ACCOUNT_ID",
+                  "envelopeId": "@body('Crear_sobre')?['envelopeId']",
+                  "documentId": "1",
+                  "document/name": "@outputs('Documento')?['{FilenameWithExtension}']",
+                  "document/documentBase64": "@base64(body('Obtener_contenido_del_documento'))"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Agregar_firmante_de_la_contraparte": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Adjuntar_documento_al_sobre": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_docusign", "operationId": "AddRecipientToEnvelope", "apiId": "/providers/Microsoft.PowerApps/apis/shared_docusign" },
+                "parameters": {
+                  "accountId": "DOCUSIGN_ACCOUNT_ID",
+                  "envelopeId": "@body('Crear_sobre')?['envelopeId']",
+                  "recipient/email": "@triggerOutputs()?['body/ContraparteCorreo']",
+                  "recipient/name": "@coalesce(triggerOutputs()?['body/ContraparteContacto'], triggerOutputs()?['body/Contraparte'])",
+                  "recipient/recipientId": "1",
+                  "recipient/routingOrder": "1"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Agregar_firmante_interno": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Agregar_firmante_de_la_contraparte": ["Succeeded"] },
+              "description": "Firma en segundo lugar: la organizacion cierra el acto una vez firmo la contraparte.",
+              "inputs": {
+                "host": { "connectionName": "shared_docusign", "operationId": "AddRecipientToEnvelope", "apiId": "/providers/Microsoft.PowerApps/apis/shared_docusign" },
+                "parameters": {
+                  "accountId": "DOCUSIGN_ACCOUNT_ID",
+                  "envelopeId": "@body('Crear_sobre')?['envelopeId']",
+                  "recipient/email": "@coalesce(triggerOutputs()?['body/ResponsableContrato/Email'], outputs('Correo_admin'))",
+                  "recipient/name": "@coalesce(triggerOutputs()?['body/ResponsableContrato/DisplayName'], 'Representante de la empresa')",
+                  "recipient/recipientId": "2",
+                  "recipient/routingOrder": "2"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Enviar_sobre": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Agregar_firmante_interno": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_docusign", "operationId": "SendEnvelope", "apiId": "/providers/Microsoft.PowerApps/apis/shared_docusign" },
+                "parameters": {
+                  "accountId": "DOCUSIGN_ACCOUNT_ID",
+                  "envelopeId": "@body('Crear_sobre')?['envelopeId']",
+                  "envelope/status": "sent"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+
+            "Marcar_en_firma": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Enviar_sobre": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Contratos",
+                  "id": "@triggerOutputs()?['body/ID']",
+                  "item/Estado/Value": "En firma",
+                  "item/DocuSignEstado/Value": "Enviado",
+                  "item/DocuSignEnvelopeId": "@body('Crear_sobre')?['envelopeId']"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Bitacora_envio_a_firma": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Marcar_en_firma": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Bitacora",
+                  "item/Title": "@concat(coalesce(triggerOutputs()?['body/Title'], ''), ' - Envio a firma')",
+                  "item/ContratoId": "@triggerOutputs()?['body/ID']",
+                  "item/Accion": "Envio a firma electronica",
+                  "item/Fecha": "@utcNow()",
+                  "item/Detalle": "@concat('Sobre de DocuSign ', body('Crear_sobre')?['envelopeId'], ' enviado a ', triggerOutputs()?['body/ContraparteCorreo'], ' y al firmante interno.')"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Avisar_falta_de_documento": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                  "parameters": {
+                    "emailMessage/To": "@coalesce(triggerOutputs()?['body/Solicitante/Email'], outputs('Correo_admin'))",
+                    "emailMessage/Cc": "@outputs('Correo_admin')",
+                    "emailMessage/Subject": "@concat('[Contratos] Falta el documento a firmar - ', coalesce(triggerOutputs()?['body/Title'], ''))",
+                    "emailMessage/Body": "<p>El contrato <b>@{coalesce(triggerOutputs()?['body/Title'], '')}</b> quedo aprobado, pero no tiene ningun documento marcado como <b>principal</b> en la biblioteca, asi que no se pudo enviar a firma.</p><p>Sube el PDF del contrato, marcalo como documento principal y vuelve a guardar el contrato para reintentar el envio.</p>",
+                    "emailMessage/Importance": "High"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": { "actions": {} }
+    }
+  },
+  "outputs": {}
+}

@@ -1,0 +1,281 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Ejecucion diaria. Recorre los contratos vigentes y avisa en los hitos de preaviso configurados, marca los vencidos y controla el vencimiento de las garantias. La lista Alertas evita que la misma notificacion se envie dos veces.",
+  "parameters": {
+    "$connections": { "defaultValue": {}, "type": "Object" },
+    "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+  },
+  "triggers": {
+    "Cada_dia_a_las_8": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "timeZone": "SA Pacific Standard Time",
+        "schedule": { "hours": ["8"], "minutes": [0] }
+      }
+    }
+  },
+  "actions": {
+    "Obtener_hitos": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Parametros",
+          "$filter": "Title eq 'DIAS_ALERTA_ESCALONADA'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Hitos": {
+      "type": "Compose",
+      "runAfter": { "Obtener_hitos": ["Succeeded"] },
+      "description": "Dias de anticipacion en los que se notifica. Si el parametro no existe, se usan los valores por defecto.",
+      "inputs": "@if(empty(body('Obtener_hitos')?['value']), createArray('90','60','30','15','7','1'), split(first(body('Obtener_hitos')?['value'])?['Valor'], ','))"
+    },
+    "Obtener_correo_admin": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Hitos": ["Succeeded"] },
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Parametros",
+          "$filter": "Title eq 'CORREO_ADMIN_CONTRATOS'",
+          "$top": 1
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Correo_admin": {
+      "type": "Compose",
+      "runAfter": { "Obtener_correo_admin": ["Succeeded"] },
+      "inputs": "@if(empty(body('Obtener_correo_admin')?['value']), '', first(body('Obtener_correo_admin')?['value'])?['Valor'])"
+    },
+
+    "Obtener_contratos_vigentes": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Correo_admin": ["Succeeded"] },
+      "description": "Solo contratos con fecha de fin real. Los de vigencia indefinida quedan fuera.",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Contratos",
+          "$filter": "(Estado eq 'Vigente' or Estado eq 'Por vencer') and VigenciaIndefinida ne 1 and FechaFin ne null",
+          "$orderby": "FechaFin asc",
+          "$top": 5000
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+
+    "Revisar_cada_contrato": {
+      "type": "Foreach",
+      "runAfter": { "Obtener_contratos_vigentes": ["Succeeded"] },
+      "foreach": "@body('Obtener_contratos_vigentes')?['value']",
+      "runtimeConfiguration": { "concurrency": { "repetitions": 4 } },
+      "actions": {
+        "Dias_restantes": {
+          "type": "Compose",
+          "description": "Diferencia en dias completos entre hoy y la fecha de fin. Negativo = ya vencido.",
+          "inputs": "@div(sub(ticks(startOfDay(items('Revisar_cada_contrato')?['FechaFin'])), ticks(startOfDay(utcNow()))), 864000000000)"
+        },
+        "Debe_alertar": {
+          "type": "Compose",
+          "runAfter": { "Dias_restantes": ["Succeeded"] },
+          "description": "Se notifica si ya vencio o si hoy coincide exactamente con un hito de preaviso.",
+          "inputs": "@or(less(outputs('Dias_restantes'), 0), contains(outputs('Hitos'), string(outputs('Dias_restantes'))))"
+        },
+        "Si_corresponde_alertar": {
+          "type": "If",
+          "runAfter": { "Debe_alertar": ["Succeeded"] },
+          "expression": { "equals": [ "@outputs('Debe_alertar')", true ] },
+          "actions": {
+            "Tipo_de_alerta": {
+              "type": "Compose",
+              "description": "En un contrato con renovacion automatica el aviso no es para renovar, sino para decidir si NO se renueva.",
+              "inputs": "@if(less(outputs('Dias_restantes'), 0), 'Vencimiento', if(equals(items('Revisar_cada_contrato')?['RenovacionAutomatica'], true), 'Renovacion automatica', 'Preaviso de vencimiento'))"
+            },
+            "Dias_a_registrar": {
+              "type": "Compose",
+              "runAfter": { "Tipo_de_alerta": ["Succeeded"] },
+              "inputs": "@if(less(outputs('Dias_restantes'), 0), 0, outputs('Dias_restantes'))"
+            },
+            "Buscar_alerta_previa": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Dias_a_registrar": ["Succeeded"] },
+              "description": "Antiduplicado: misma combinacion de contrato, tipo de alerta y dias de anticipacion.",
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Alertas",
+                  "$filter": "ContratoId eq @{items('Revisar_cada_contrato')?['ID']} and TipoAlerta eq '@{outputs('Tipo_de_alerta')}' and DiasAnticipacion eq @{outputs('Dias_a_registrar')}",
+                  "$top": 1
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Si_no_se_notifico_antes": {
+              "type": "If",
+              "runAfter": { "Buscar_alerta_previa": ["Succeeded"] },
+              "expression": { "equals": [ "@empty(body('Buscar_alerta_previa')?['value'])", true ] },
+              "actions": {
+                "Actualizar_estado_del_contrato": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Contratos",
+                      "id": "@items('Revisar_cada_contrato')?['ID']",
+                      "item/Estado/Value": "@if(less(outputs('Dias_restantes'), 0), 'Vencido', 'Por vencer')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Destinatarios": {
+                  "type": "Compose",
+                  "runAfter": { "Actualizar_estado_del_contrato": ["Succeeded"] },
+                  "description": "Responsable del contrato y, en su defecto, el solicitante. El administrador siempre va en copia.",
+                  "inputs": "@coalesce(items('Revisar_cada_contrato')?['ResponsableContrato']?['Email'], items('Revisar_cada_contrato')?['Solicitante']?['Email'], outputs('Correo_admin'))"
+                },
+                "Enviar_alerta": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Destinatarios": ["Succeeded"] },
+                  "inputs": {
+                    "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                    "parameters": {
+                      "emailMessage/To": "@outputs('Destinatarios')",
+                      "emailMessage/Cc": "@outputs('Correo_admin')",
+                      "emailMessage/Subject": "@concat('[Contratos] ', outputs('Tipo_de_alerta'), ': ', coalesce(items('Revisar_cada_contrato')?['Title'], ''), ' - ', items('Revisar_cada_contrato')?['NombreContrato'])",
+                      "emailMessage/Body": "<p>@{if(less(outputs('Dias_restantes'), 0), concat('El contrato vencio hace ', string(mul(outputs('Dias_restantes'), -1)), ' dia(s).'), concat('El contrato vence en ', string(outputs('Dias_restantes')), ' dia(s).'))}</p><table cellpadding=\"6\" style=\"border-collapse:collapse\"><tr><td><b>Codigo</b></td><td>@{coalesce(items('Revisar_cada_contrato')?['Title'], '')}</td></tr><tr><td><b>Contrato</b></td><td>@{items('Revisar_cada_contrato')?['NombreContrato']}</td></tr><tr><td><b>Contraparte</b></td><td>@{items('Revisar_cada_contrato')?['Contraparte']}</td></tr><tr><td><b>Tipo</b></td><td>@{items('Revisar_cada_contrato')?['TipoContrato']?['Value']}</td></tr><tr><td><b>Vence</b></td><td>@{formatDateTime(items('Revisar_cada_contrato')?['FechaFin'], 'dd/MM/yyyy')}</td></tr><tr><td><b>Renovacion automatica</b></td><td>@{if(equals(items('Revisar_cada_contrato')?['RenovacionAutomatica'], true), 'SI - si no deseas renovar, debes comunicarlo antes del vencimiento', 'No')}</td></tr></table><p><a href=\"@{concat('https://CONTOSO.sharepoint.com/sites/Contratos/Lists/Contratos/DispForm.aspx?ID=', string(items('Revisar_cada_contrato')?['ID']))}\">Abrir el contrato</a></p>",
+                      "emailMessage/Importance": "@if(lessOrEquals(outputs('Dias_restantes'), 7), 'High', 'Normal')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Registrar_alerta": {
+                  "type": "OpenApiConnection",
+                  "runAfter": { "Enviar_alerta": ["Succeeded"] },
+                  "inputs": {
+                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Alertas",
+                      "item/Title": "@concat(coalesce(items('Revisar_cada_contrato')?['Title'], 'S/C'), ' - ', outputs('Tipo_de_alerta'), ' - ', string(outputs('Dias_a_registrar')), 'd')",
+                      "item/ContratoId": "@items('Revisar_cada_contrato')?['ID']",
+                      "item/TipoAlerta/Value": "@outputs('Tipo_de_alerta')",
+                      "item/DiasAnticipacion": "@outputs('Dias_a_registrar')",
+                      "item/FechaEnvio": "@utcNow()",
+                      "item/Destinatarios": "@outputs('Destinatarios')",
+                      "item/Canal/Value": "Correo"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              },
+              "else": { "actions": {} }
+            }
+          },
+          "else": { "actions": {} }
+        }
+      }
+    },
+
+    "Obtener_garantias_por_vencer": {
+      "type": "OpenApiConnection",
+      "runAfter": { "Revisar_cada_contrato": ["Succeeded"] },
+      "description": "Cartas fianza y demas garantias que vencen dentro de los proximos 30 dias.",
+      "inputs": {
+        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "parameters": {
+          "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+          "table": "Contratos",
+          "$filter": "TieneGarantia eq 1 and VencimientoGarantia ne null and VencimientoGarantia le '@{addDays(utcNow(), 30, 'yyyy-MM-dd')}' and Estado ne 'Terminado' and Estado ne 'Anulado'",
+          "$orderby": "VencimientoGarantia asc",
+          "$top": 1000
+        },
+        "authentication": "@parameters('$authentication')"
+      }
+    },
+    "Revisar_cada_garantia": {
+      "type": "Foreach",
+      "runAfter": { "Obtener_garantias_por_vencer": ["Succeeded"] },
+      "foreach": "@body('Obtener_garantias_por_vencer')?['value']",
+      "runtimeConfiguration": { "concurrency": { "repetitions": 4 } },
+      "actions": {
+        "Dias_hasta_el_vencimiento_de_la_garantia": {
+          "type": "Compose",
+          "inputs": "@div(sub(ticks(startOfDay(items('Revisar_cada_garantia')?['VencimientoGarantia'])), ticks(startOfDay(utcNow()))), 864000000000)"
+        },
+        "Buscar_alerta_de_garantia_previa": {
+          "type": "OpenApiConnection",
+          "runAfter": { "Dias_hasta_el_vencimiento_de_la_garantia": ["Succeeded"] },
+          "inputs": {
+            "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+            "parameters": {
+              "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+              "table": "Alertas",
+              "$filter": "ContratoId eq @{items('Revisar_cada_garantia')?['ID']} and TipoAlerta eq 'Vencimiento de garantia' and DiasAnticipacion eq @{outputs('Dias_hasta_el_vencimiento_de_la_garantia')}",
+              "$top": 1
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Si_la_garantia_no_se_notifico": {
+          "type": "If",
+          "runAfter": { "Buscar_alerta_de_garantia_previa": ["Succeeded"] },
+          "expression": {
+            "and": [
+              { "equals": [ "@empty(body('Buscar_alerta_de_garantia_previa')?['value'])", true ] },
+              { "equals": [ "@contains(createArray(30, 15, 7, 1, 0), outputs('Dias_hasta_el_vencimiento_de_la_garantia'))", true ] }
+            ]
+          },
+          "actions": {
+            "Avisar_garantia": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                "parameters": {
+                  "emailMessage/To": "@coalesce(items('Revisar_cada_garantia')?['ResponsableContrato']?['Email'], outputs('Correo_admin'))",
+                  "emailMessage/Cc": "@outputs('Correo_admin')",
+                  "emailMessage/Subject": "@concat('[Contratos] Garantia por vencer: ', coalesce(items('Revisar_cada_garantia')?['Title'], ''))",
+                  "emailMessage/Body": "<p>La garantia del contrato <b>@{coalesce(items('Revisar_cada_garantia')?['Title'], '')}</b> (@{items('Revisar_cada_garantia')?['NombreContrato']}) vence en @{outputs('Dias_hasta_el_vencimiento_de_la_garantia')} dia(s).</p><p>Tipo: @{items('Revisar_cada_garantia')?['TipoGarantia']?['Value']}<br>Monto: @{coalesce(items('Revisar_cada_garantia')?['MontoGarantia'], 0)}<br>Vence: @{formatDateTime(items('Revisar_cada_garantia')?['VencimientoGarantia'], 'dd/MM/yyyy')}</p><p>Gestiona la renovacion o la devolucion de la garantia segun corresponda.</p>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Registrar_alerta_de_garantia": {
+              "type": "OpenApiConnection",
+              "runAfter": { "Avisar_garantia": ["Succeeded"] },
+              "inputs": {
+                "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "parameters": {
+                  "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                  "table": "Alertas",
+                  "item/Title": "@concat(coalesce(items('Revisar_cada_garantia')?['Title'], 'S/C'), ' - Garantia - ', string(outputs('Dias_hasta_el_vencimiento_de_la_garantia')), 'd')",
+                  "item/ContratoId": "@items('Revisar_cada_garantia')?['ID']",
+                  "item/TipoAlerta/Value": "Vencimiento de garantia",
+                  "item/DiasAnticipacion": "@outputs('Dias_hasta_el_vencimiento_de_la_garantia')",
+                  "item/FechaEnvio": "@utcNow()",
+                  "item/Destinatarios": "@coalesce(items('Revisar_cada_garantia')?['ResponsableContrato']?['Email'], outputs('Correo_admin'))",
+                  "item/Canal/Value": "Correo"
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            }
+          },
+          "else": { "actions": {} }
+        }
+      }
+    }
+  },
+  "outputs": {}
+}
