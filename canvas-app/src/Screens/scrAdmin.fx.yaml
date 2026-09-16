@@ -1,7 +1,8 @@
-# Administración: matriz de aprobación, parámetros y áreas.
+# Administración: matriz de aprobación, parámetros, áreas y categorías.
 # Incluye el simulador de ruta de aprobación, que reproduce en Power Fx la misma
 # resolución que hace el flujo 01.
-# Fórmulas comentadas en canvas-app/formulas/04-administracion.md
+# Fórmulas comentadas en canvas-app/formulas/04-administracion.md y, para la
+# sección Categorías, en canvas-app/formulas/05-categorias-campos-dinamicos.md
 Screens:
   scrAdmin:
     Properties:
@@ -15,9 +16,12 @@ Screens:
                 SortByColumns(SortByColumns(MatrizAprobacion, "Nivel", SortOrder.Ascending),
                               "MontoDesdePEN", SortOrder.Ascending)),
             ClearCollect(colParametros, Parametros),
-            ClearCollect(colAreasAdmin, Areas)
+            ClearCollect(colAreasAdmin, Areas),
+            ClearCollect(colCategoriasAdmin, SortByColumns(Categorias, "Orden", SortOrder.Ascending)),
+            ClearCollect(colCamposAdmin,
+                SortByColumns(SortByColumns(CamposPersonalizados, "Orden", SortOrder.Ascending), "Seccion", SortOrder.Ascending))
         );
-        UpdateContext({locSeccion: "Matriz", locSimulado: false})
+        UpdateContext({locSeccion: "Matriz", locSimulado: false, locCategoriaAdminId: 0})
     Children:
       - recCabeceraAd:
           Control: Rectangle
@@ -54,12 +58,12 @@ Screens:
           Properties:
             X: =24
             Y: =76
-            Width: =540
+            Width: =680
             Height: =44
             TemplateSize: =170
             ShowScrollbar: =false
             Items: |-
-              =Table({Clave: "Matriz"}, {Clave: "Parámetros"}, {Clave: "Áreas"})
+              =Table({Clave: "Matriz"}, {Clave: "Parámetros"}, {Clave: "Áreas"}, {Clave: "Categorías"})
           Children:
             - lblSeccion:
                 Control: Label
@@ -459,3 +463,289 @@ Screens:
                   OnChange: |-
                     =Patch(Areas, LookUp(Areas, ID = ThisItem.ID), {Gerente: cmbAreaGerente.Selected});
                     ClearCollect(colAreasAdmin, Areas)
+
+      # --- Sección Categorías (carpetas y esquema dinámico) --------------------
+      # Detalle completo en canvas-app/formulas/05-categorias-campos-dinamicos.md
+      - lblCatAdminAviso:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Cada categoría es una carpeta administrable. Selecciona una para ver y editar sus campos adicionales y cláusulas."
+            X: =24
+            Y: =136
+            Width: =Parent.Width - 48
+            Height: =28
+            Size: =gblTema.FuenteMenor
+            Color: =gblTema.TextoSuave
+            Visible: =locSeccion = "Categorías"
+      - btnNuevaCategoria:
+          Control: Button
+          Properties:
+            Text: ="+ Nueva categoría"
+            X: =24
+            Y: =168
+            Width: =180
+            Height: =36
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Categorías"
+            OnSelect: |-
+              =Set(gblCategoriaEnEdicion, Blank());
+              NewForm(frmCategoria);
+              UpdateContext({locPanelCategoria: true})
+      - galCategoriasAdmin:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =216
+            Width: =(Parent.Width - 64) * 0.38
+            Height: =Parent.Height - 248
+            TemplateSize: =56
+            Visible: =locSeccion = "Categorías"
+            Items: =colCategoriasAdmin
+          Children:
+            - recCatAdminFondo:
+                Control: Rectangle
+                Properties:
+                  X: =0
+                  Y: =0
+                  Width: =Parent.TemplateWidth
+                  Height: =52
+                  BorderRadius: =gblTema.Radio
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+                  Fill: |-
+                    =If(ThisItem.ID = locCategoriaAdminId, gblTema.PrimarioSuave, gblTema.Tarjeta)
+                  OnSelect: |-
+                    =UpdateContext({locCategoriaAdminId: ThisItem.ID})
+            - lblCatAdminNombre:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Title
+                  X: =16
+                  Y: =4
+                  Width: =Parent.TemplateWidth * 0.55
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblCatAdminResp:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =Coalesce(ThisItem.ResponsableAdicional.DisplayName, "sin responsable adicional")
+                  X: =16
+                  Y: =26
+                  Width: =Parent.TemplateWidth * 0.55
+                  Height: =20
+                  Size: =gblTema.FuenteMenor
+                  Color: =gblTema.TextoSuave
+            - btnCatAdminEditar:
+                Control: Button
+                Properties:
+                  Text: ="Editar"
+                  X: =Parent.TemplateWidth - 90
+                  Y: =10
+                  Width: =78
+                  Height: =32
+                  Fill: =gblTema.Tarjeta
+                  Color: =gblTema.Primario
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+                  BorderRadius: =gblTema.Radio
+                  OnSelect: |-
+                    =Set(gblCategoriaEnEdicion, ThisItem);
+                    EditForm(frmCategoria);
+                    UpdateContext({locPanelCategoria: true, locCategoriaAdminId: ThisItem.ID})
+      - frmCategoria:
+          Control: Form
+          Properties:
+            DataSource: =Categorias
+            Item: =gblCategoriaEnEdicion
+            X: =24
+            Y: =220
+            Width: =(Parent.Width - 64) * 0.38
+            Height: =320
+            Columns: =1
+            Visible: =locSeccion = "Categorías" && locPanelCategoria
+            OnSuccess: |-
+              =ClearCollect(colCategoriasAdmin, SortByColumns(Categorias, "Orden", SortOrder.Ascending));
+              ClearCollect(colCategorias, Filter(Categorias, Activo = true));
+              UpdateContext({locPanelCategoria: false});
+              Notify("Categoría guardada.", NotificationType.Success)
+            OnFailure: |-
+              =Notify("No se pudo guardar: " & frmCategoria.Error, NotificationType.Error, 6000)
+      - btnCategoriaCancelar:
+          Control: Button
+          Properties:
+            Text: ="Cancelar"
+            X: =24
+            Y: =548
+            Width: =120
+            Height: =32
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.TextoSuave
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Categorías" && locPanelCategoria
+            OnSelect: |-
+              =ResetForm(frmCategoria);
+              UpdateContext({locPanelCategoria: false})
+      - btnCategoriaGuardar:
+          Control: Button
+          Properties:
+            Text: ="Guardar"
+            X: =152
+            Y: =548
+            Width: =120
+            Height: =32
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Categorías" && locPanelCategoria
+            OnSelect: =SubmitForm(frmCategoria)
+
+      # --- Campos personalizados de la categoría seleccionada -----------------
+      - lblCamposAdminTitulo:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(locCategoriaAdminId = 0, "Selecciona una categoría para ver sus campos",
+                  "Campos de: " & LookUp(colCategoriasAdmin, ID = locCategoriaAdminId).Title)
+            X: =24 + (Parent.Width - 64) * 0.38 + 24
+            Y: =216
+            Width: =(Parent.Width - 64) * 0.62 - 24
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+            Visible: =locSeccion = "Categorías"
+      - btnNuevoCampo:
+          Control: Button
+          Properties:
+            Text: ="+ Nuevo campo"
+            X: =24 + (Parent.Width - 64) * 0.38 + 24
+            Y: =252
+            Width: =160
+            Height: =32
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Categorías" && locCategoriaAdminId <> 0
+            OnSelect: |-
+              =Set(gblCampoEnEdicion, Blank());
+              NewForm(frmCampo);
+              UpdateContext({locPanelCampo: true})
+      - galCamposAdmin:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24 + (Parent.Width - 64) * 0.38 + 24
+            Y: =296
+            Width: =(Parent.Width - 64) * 0.62 - 24
+            Height: =Parent.Height - 328
+            TemplateSize: =56
+            Visible: =locSeccion = "Categorías" && !locPanelCampo
+            Items: |-
+              =Filter(colCamposAdmin, locCategoriaAdminId = 0 || IsBlank(Categoria) || Categoria.Id = locCategoriaAdminId)
+          Children:
+            - lblCampoAdminEtiqueta:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =ThisItem.Etiqueta & If(IsBlank(ThisItem.Categoria), "  (todas las categorías)", "")
+                  X: =12
+                  Y: =4
+                  Width: =Parent.TemplateWidth * 0.4
+                  Height: =24
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+            - lblCampoAdminMeta:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =ThisItem.TipoDato.Value & " · " & ThisItem.Seccion & If(ThisItem.Obligatorio, " · obligatorio", "")
+                  X: =12
+                  Y: =26
+                  Width: =Parent.TemplateWidth * 0.4
+                  Height: =20
+                  Size: =gblTema.FuenteMenor
+                  Color: =gblTema.TextoSuave
+            - tglCampoAdminActivo:
+                Control: Classic/Toggle
+                Properties:
+                  Default: =ThisItem.Activo
+                  X: =Parent.TemplateWidth * 0.44
+                  Y: =12
+                  Width: =70
+                  Height: =28
+                  OnChange: |-
+                    =Patch(CamposPersonalizados, LookUp(CamposPersonalizados, ID = ThisItem.ID), {Activo: tglCampoAdminActivo.Value});
+                    ClearCollect(colCamposAdmin,
+                        SortByColumns(SortByColumns(CamposPersonalizados, "Orden", SortOrder.Ascending), "Seccion", SortOrder.Ascending))
+            - btnCampoAdminEditar:
+                Control: Button
+                Properties:
+                  Text: ="Editar"
+                  X: =Parent.TemplateWidth - 90
+                  Y: =10
+                  Width: =78
+                  Height: =32
+                  Fill: =gblTema.Tarjeta
+                  Color: =gblTema.Primario
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+                  BorderRadius: =gblTema.Radio
+                  OnSelect: |-
+                    =Set(gblCampoEnEdicion, ThisItem);
+                    EditForm(frmCampo);
+                    UpdateContext({locPanelCampo: true})
+      - frmCampo:
+          Control: Form
+          Properties:
+            DataSource: =CamposPersonalizados
+            Item: =gblCampoEnEdicion
+            X: =24 + (Parent.Width - 64) * 0.38 + 24
+            Y: =296
+            Width: =(Parent.Width - 64) * 0.62 - 24
+            Height: =Parent.Height - 380
+            Columns: =1
+            Visible: =locSeccion = "Categorías" && locPanelCampo
+            OnSuccess: |-
+              =ClearCollect(colCamposAdmin,
+                  SortByColumns(SortByColumns(CamposPersonalizados, "Orden", SortOrder.Ascending), "Seccion", SortOrder.Ascending));
+              UpdateContext({locPanelCampo: false});
+              Notify("Campo guardado.", NotificationType.Success)
+            OnFailure: |-
+              =Notify("No se pudo guardar: " & frmCampo.Error, NotificationType.Error, 6000)
+      - btnCampoCancelar:
+          Control: Button
+          Properties:
+            Text: ="Cancelar"
+            X: =24 + (Parent.Width - 64) * 0.38 + 24
+            Y: =Parent.Height - 76
+            Width: =120
+            Height: =32
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.TextoSuave
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Categorías" && locPanelCampo
+            OnSelect: |-
+              =ResetForm(frmCampo);
+              UpdateContext({locPanelCampo: false})
+      - btnCampoGuardar:
+          Control: Button
+          Properties:
+            Text: ="Guardar"
+            X: =24 + (Parent.Width - 64) * 0.38 + 156
+            Y: =Parent.Height - 76
+            Width: =120
+            Height: =32
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Categorías" && locPanelCampo
+            OnSelect: =SubmitForm(frmCampo)

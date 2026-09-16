@@ -1,5 +1,9 @@
-# Bandeja: búsqueda y listado de contratos.
-# La consulta se construye en ramas para que cada una se delegue entera.
+# Bandeja: navegación por carpetas (categorías) + búsqueda con filtros.
+# La consulta se construye en ramas para que cada combinación se delegue entera:
+# 3 dimensiones opcionales (categoría, estado, tipo) => 8 ramas explícitas. Es
+# mecánico, pero cada rama es un único Filter() con condiciones ANDadas y sin
+# mezclar una condición constante con una de fila — ver la regla de delegación
+# en canvas-app/formulas/00-app-y-tema.md.
 # Fórmulas comentadas en canvas-app/formulas/01-inicio-y-bandeja.md
 Screens:
   scrBandeja:
@@ -11,6 +15,8 @@ Screens:
                        If(gblFiltroEntrada = "Vigente", "Vigente",
                        If(gblFiltroEntrada = "Vencido", "Vencido", "(Todos)"))),
             locTipo: "(Todos)",
+            locCategoriaId: 0,
+            locCategoriaNombre: "Todas las categorías",
             locSoloMios: false
         });
         Set(gblFiltroEntrada, Blank());
@@ -46,14 +52,121 @@ Screens:
             Size: =gblTema.FuenteTitulo
             FontWeight: =FontWeight.Semibold
 
-      # --- Filtros ----------------------------------------------------------
+      # --- Panel lateral de carpetas (categorías) ----------------------------
+      - recRail:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Tarjeta
+            X: =0
+            Y: =64
+            Width: =220
+            Height: =Parent.Height - 64
+      - recRailBorde:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Borde
+            X: =219
+            Y: =64
+            Width: =1
+            Height: =Parent.Height - 64
+      - lblRailTitulo:
+          Control: Label
+          Properties:
+            Text: ="Carpetas"
+            X: =20
+            Y: =80
+            Width: =180
+            Height: =24
+            Size: =gblTema.FuenteMenor
+            Color: =gblTema.TextoSuave
+            FontWeight: =FontWeight.Semibold
+      - btnCategoriaTodas:
+          Control: Classic/Button
+          Properties:
+            Text: ="■  Todas las categorías"
+            X: =12
+            Y: =108
+            Width: =196
+            Height: =40
+            Align: =Align.Left
+            PaddingLeft: =12
+            BorderThickness: =0
+            Fill: |-
+              =If(locCategoriaId = 0, gblTema.PrimarioSuave, gblTema.Tarjeta)
+            Color: |-
+              =If(locCategoriaId = 0, gblTema.Primario, gblTema.Texto)
+            Font: =Font.'Open Sans'
+            FontWeight: |-
+              =If(locCategoriaId = 0, FontWeight.Semibold, FontWeight.Normal)
+            Size: =gblTema.FuenteBase
+            OnSelect: |-
+              =UpdateContext({locCategoriaId: 0, locCategoriaNombre: "Todas las categorías"})
+      - galCategorias:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =12
+            Y: =152
+            Width: =196
+            Height: =Parent.Height - 188
+            TemplateSize: =40
+            Items: =SortByColumns(colCategorias, "Orden", SortOrder.Ascending)
+          Children:
+            - recCatFondo:
+                Control: Rectangle
+                Properties:
+                  X: =0
+                  Y: =0
+                  Width: =Parent.TemplateWidth
+                  Height: =40
+                  BorderRadius: =6
+                  Fill: |-
+                    =If(ThisItem.ID = locCategoriaId, gblTema.PrimarioSuave, gblTema.Tarjeta)
+                  OnSelect: |-
+                    =UpdateContext({locCategoriaId: ThisItem.ID, locCategoriaNombre: ThisItem.Title})
+            - recCatColor:
+                Control: Rectangle
+                Properties:
+                  X: =12
+                  Y: =14
+                  Width: =12
+                  Height: =12
+                  BorderRadius: =6
+                  Fill: |-
+                    =Coalesce(ColorValue(ThisItem.Color), gblTema.TextoSuave)
+            - lblCatNombre:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Title
+                  X: =32
+                  Y: =0
+                  Width: =Parent.TemplateWidth - 40
+                  Height: =40
+                  Size: =gblTema.FuenteBase
+                  Color: |-
+                    =If(ThisItem.ID = locCategoriaId, gblTema.Primario, gblTema.Texto)
+                  FontWeight: |-
+                    =If(ThisItem.ID = locCategoriaId, FontWeight.Semibold, FontWeight.Normal)
+
+      # --- Filtros (a la derecha del panel de carpetas) ----------------------
+      - lblFiltrandoPor:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Carpeta: " & locCategoriaNombre
+            X: =244
+            Y: =76
+            Width: =600
+            Height: =20
+            Size: =gblTema.FuenteMenor
+            Color: =gblTema.TextoSuave
       - txtBuscar:
           Control: Classic/TextInput
           Properties:
             HintText: ="Empieza a escribir el código, nombre o contraparte"
-            X: =24
-            Y: =84
-            Width: =(Parent.Width - 72) * 0.5
+            X: =244
+            Y: =100
+            Width: =(Parent.Width - 292) * 0.44
             Height: =40
             BorderColor: =gblTema.Borde
       - cmbEstado:
@@ -64,9 +177,9 @@ Screens:
             SearchFields: =["Valor"]
             SelectMultiple: =false
             DefaultSelectedItems: =LookUp(colEstadosFiltro, Valor = locEstado)
-            X: =24 + (Parent.Width - 72) * 0.5 + 12
-            Y: =84
-            Width: =(Parent.Width - 72) * 0.25
+            X: =244 + (Parent.Width - 292) * 0.44 + 12
+            Y: =100
+            Width: =(Parent.Width - 292) * 0.27
             Height: =40
             OnChange: |-
               =UpdateContext({locEstado: Coalesce(cmbEstado.Selected.Valor, "(Todos)")})
@@ -80,42 +193,61 @@ Screens:
             DisplayFields: =["Value"]
             SearchFields: =["Value"]
             SelectMultiple: =false
-            X: =24 + (Parent.Width - 72) * 0.75 + 24
-            Y: =84
-            Width: =(Parent.Width - 72) * 0.25
+            X: =244 + (Parent.Width - 292) * 0.71 + 24
+            Y: =100
+            Width: =(Parent.Width - 292) * 0.27
             Height: =40
             OnChange: |-
               =UpdateContext({locTipo: Coalesce(cmbTipo.Selected.Value, "(Todos)")})
 
-      # --- Listado ----------------------------------------------------------
+      # --- Listado ------------------------------------------------------------
       - galContratos:
           Control: Gallery
           Variant: Vertical
           Properties:
-            X: =24
-            Y: =140
-            Width: =Parent.Width - 48
-            Height: =Parent.Height - 172
+            X: =244
+            Y: =156
+            Width: =Parent.Width - 268
+            Height: =Parent.Height - 188
             TemplateSize: =92
             TemplatePadding: =6
             Items: |-
               =SortByColumns(
                   With({_buscar: Trim(txtBuscar.Text)},
                       Switch(
-                          (locEstado <> "(Todos)") & "|" & (locTipo <> "(Todos)"),
+                          (locCategoriaId <> 0) & "|" & (locEstado <> "(Todos)") & "|" & (locTipo <> "(Todos)"),
 
-                          "true|true",
+                          "true|true|true",
                               Filter(Contratos,
-                                  Estado.Value = locEstado,
-                                  TipoContrato.Value = locTipo,
+                                  Categoria.Id = locCategoriaId, Estado.Value = locEstado, TipoContrato.Value = locTipo,
                                   StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
 
-                          "true|false",
+                          "true|true|false",
+                              Filter(Contratos,
+                                  Categoria.Id = locCategoriaId, Estado.Value = locEstado,
+                                  StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
+
+                          "true|false|true",
+                              Filter(Contratos,
+                                  Categoria.Id = locCategoriaId, TipoContrato.Value = locTipo,
+                                  StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
+
+                          "true|false|false",
+                              Filter(Contratos,
+                                  Categoria.Id = locCategoriaId,
+                                  StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
+
+                          "false|true|true",
+                              Filter(Contratos,
+                                  Estado.Value = locEstado, TipoContrato.Value = locTipo,
+                                  StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
+
+                          "false|true|false",
                               Filter(Contratos,
                                   Estado.Value = locEstado,
                                   StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
 
-                          "false|true",
+                          "false|false|true",
                               Filter(Contratos,
                                   TipoContrato.Value = locTipo,
                                   StartsWith(Title, _buscar) || StartsWith(NombreContrato, _buscar) || StartsWith(Contraparte, _buscar)),
@@ -175,7 +307,7 @@ Screens:
                   Text: =ThisItem.NombreContrato
                   X: =18
                   Y: =30
-                  Width: =Parent.TemplateWidth * 0.42
+                  Width: =Parent.TemplateWidth * 0.38
                   Height: =24
                   Size: =gblTema.FuenteBase
                   FontWeight: =FontWeight.Semibold
@@ -187,17 +319,28 @@ Screens:
                      If(IsBlank(ThisItem.ContraparteRUC), "", " · RUC " & ThisItem.ContraparteRUC)
                   X: =18
                   Y: =54
-                  Width: =Parent.TemplateWidth * 0.42
+                  Width: =Parent.TemplateWidth * 0.38
                   Height: =22
                   Color: =gblTema.TextoSuave
                   Size: =gblTema.FuenteMenor
+            - lblFilaCategoria:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =If(IsBlank(ThisItem.Categoria), "", "▸ " & ThisItem.Categoria.Value)
+                  X: =18
+                  Y: =74
+                  Width: =Parent.TemplateWidth * 0.38
+                  Height: =18
+                  Color: =gblTema.Info
+                  Size: =10
             - lblFilaMonto:
                 Control: Label
                 Properties:
                   Text: |-
                     =If(ThisItem.SinMontoDeterminado, "Monto no determinado",
                         ThisItem.Moneda.Value & " " & Text(ThisItem.Monto, "#,##0.00"))
-                  X: =Parent.TemplateWidth * 0.46
+                  X: =Parent.TemplateWidth * 0.42
                   Y: =30
                   Width: =Parent.TemplateWidth * 0.2
                   Height: =24
@@ -208,7 +351,7 @@ Screens:
                   Text: |-
                     =Text(ThisItem.FechaInicio, "dd/mm/yyyy") & " → " &
                      If(ThisItem.VigenciaIndefinida, "indefinida", Text(ThisItem.FechaFin, "dd/mm/yyyy"))
-                  X: =Parent.TemplateWidth * 0.46
+                  X: =Parent.TemplateWidth * 0.42
                   Y: =54
                   Width: =Parent.TemplateWidth * 0.25
                   Height: =22
@@ -250,12 +393,12 @@ Screens:
           Control: Label
           Properties:
             Text: |-
-              =If(IsBlank(Trim(txtBuscar.Text)) && locEstado = "(Todos)" && locTipo = "(Todos)",
+              =If(IsBlank(Trim(txtBuscar.Text)) && locEstado = "(Todos)" && locTipo = "(Todos)" && locCategoriaId = 0,
                   "Todavía no hay contratos registrados.",
                   "Ningún contrato coincide con la búsqueda. Prueba con menos filtros.")
-            X: =24
-            Y: =180
-            Width: =Parent.Width - 48
+            X: =244
+            Y: =196
+            Width: =Parent.Width - 268
             Height: =48
             Align: =Align.Center
             Color: =gblTema.TextoSuave

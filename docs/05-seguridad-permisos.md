@@ -54,6 +54,9 @@ ve qué.
 | `MovimientosCustodia` | Control total | Lectura | Lectura | **Aportar s/e** | — | Lectura |
 | `Adendas` | Control total | Aportar s/e | Aportar s/e | — | Lectura | Lectura |
 | `Alertas` | Control total | Lectura | Lectura | — | — | Lectura |
+| `Categorias` | Control total | Lectura | Lectura | Lectura | Lectura | Lectura |
+| `CamposPersonalizados` | Control total | Lectura | Lectura | Lectura | Lectura | Lectura |
+| `ContratosCamposValor` | Control total | Aportar s/e | Aportar s/e | Aportar s/e | Lectura | Lectura |
 
 *Aportar s/e* = Aportar sin eliminar.
 

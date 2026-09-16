@@ -1,6 +1,6 @@
 # 02 — Modelo de datos
 
-Todo vive en un único sitio de SharePoint Online (`/sites/Contratos`): **9 listas** y
+Todo vive en un único sitio de SharePoint Online (`/sites/Contratos`): **13 listas** y
 **1 biblioteca de documentos**.
 
 > **Regla de oro:** los *nombres internos* de las columnas (columna «Interno» en las
@@ -17,17 +17,27 @@ Todo vive en un único sitio de SharePoint Online (`/sites/Contratos`): **9 list
 │ (reglas)     │  aplica  │  (maestro)   │   1:N    │ (biblioteca)         │
 └──────────────┘          └──────┬───────┘          └──────────────────────┘
                                  │ 1:N
-        ┌────────────┬───────────┼───────────┬────────────┐
-        ▼            ▼           ▼           ▼            ▼
-  ┌──────────┐ ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌──────────┐
-  │Aprobacion│ │ Adendas │ │Movimient.│ │ Alertas │ │ Bitacora │
-  │    es    │ │         │ │ Custodia │ │         │ │          │
-  └──────────┘ └─────────┘ └──────────┘ └─────────┘ └──────────┘
-
-  ┌────────────┐
-  │ Parametros │  (configuración global: tipo de cambio, correos, SLA)
-  └────────────┘
+        ┌────────────┬───────────┼───────────┬────────────┬────────────┐
+        ▼            ▼           ▼           ▼            ▼            ▼
+  ┌──────────┐ ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌──────────┐ ┌───────────┐
+  │Aprobacion│ │ Adendas │ │Movimient.│ │ Alertas │ │ Bitacora │ │ Contratos │
+  │    es    │ │         │ │ Custodia │ │         │ │          │ │CamposValor│
+  └──────────┘ └─────────┘ └──────────┘ └─────────┘ └──────────┘ └─────┬─────┘
+                                                                        │ N:1
+  ┌────────────┐                          ┌──────────────┐      ┌──────▼──────┐
+  │ Parametros │  (config. global)        │  Categorias  │ ───▶ │CamposPerso- │
+  └────────────┘                          │(carpetas,    │ 1:N  │nalizados    │
+                                           │ jerárquicas) │      │(esquema por │
+        Contratos.Categoria ──────────────┴──────────────┘      │ categoría)  │
+        (qué categoría es cada contrato)                        └─────────────┘
 ```
+
+Las tres últimas —`Categorias`, `CamposPersonalizados` y `ContratosCamposValor`—
+son el mecanismo de **esquema configurable por categoría**: carpetas que el
+administrador crea desde la app, cada una con sus propios campos adicionales y
+su propio checklist de cláusulas, sin tocar SharePoint ni redesplegar nada. El
+diseño y su costo real de rendimiento están explicados en la sección
+[13 — Esquema dinámico por categoría](#13-categorias-camposdinámicos-y-el-mecanismo-de-esquema-configurable).
 
 ---
 
@@ -44,6 +54,7 @@ Lista principal. Una fila = un contrato.
 | Tipo de contrato | `TipoContrato` | Elección | Obligatorio. Ver catálogo abajo. |
 | Objeto del contrato | `ObjetoContrato` | Nota | Descripción del alcance. |
 | Contrato relacionado | `ContratoPadre` | Búsqueda → `Contratos` | Se usa al renovar: apunta al contrato original. |
+| Categoría | `Categoria` | Búsqueda → `Categorias` | Carpeta administrable (Logística, Comercial, RRHH, Legal...). Determina qué campos adicionales y qué cláusulas se piden. **No** reemplaza a `TipoContrato`: ver [sección 13](#13-categorias-camposdinámicos-y-el-mecanismo-de-esquema-configurable). |
 
 ### Contraparte
 
@@ -340,6 +351,137 @@ Registra las acciones de la app que no quedan en el historial de versiones.
 
 ---
 
+## 11. `Categorias` — carpetas administrables
+
+Taxonomía de negocio que el administrador mantiene desde la app: Logística,
+Comercial, Administrativo, RRHH, Legal... **No** es un catálogo fijo como
+`TipoContrato` — se pueden crear, renombrar o desactivar categorías sin tocar
+SharePoint ni Power Automate.
+
+| Visible | Interno | Tipo | Notas |
+|---|---|---|---|
+| Nombre | `Title` | Texto | «Logística», «Legal»... |
+| Categoría padre | `CategoriaPadre` | Búsqueda → `Categorias` | Opcional. Permite subcarpetas (p. ej. «Legal › Laboral»). |
+| Ícono | `Icono` | Texto | Nombre del ícono de Power Apps (`Icon.Truck`, `Icon.Education`...). |
+| Color | `Color` | Texto | Hex, para distinguir la carpeta en la bandeja. |
+| Responsable adicional | `ResponsableAdicional` | Persona | Se copia en las alertas de vencimiento de esta categoría — p. ej., alguien de Compras en la carpeta «Logística». Opcional. |
+| Orden | `Orden` | Número | Orden de aparición en el árbol de carpetas. |
+| Activo | `Activo` | Sí/No | Desactivar en vez de borrar: conserva el historial de los contratos ya clasificados. |
+
+---
+
+## 12. `CamposPersonalizados` — esquema por categoría
+
+Define **qué campos adicionales y qué cláusulas** aparecen al registrar un
+contrato de cada categoría. Es la lista que el administrador edita para
+agregar un campo nuevo — el equivalente a "crear una columna", pero sin tocar
+SharePoint.
+
+| Visible | Interno | Tipo | Notas |
+|---|---|---|---|
+| Nombre técnico | `Title` | Texto | Sin espacios ni tildes (`ClausulaAntisoborno`, `NumeroOrdenCompra`). Es la clave que lo vincula con su valor. |
+| Categoría | `Categoria` | Búsqueda → `Categorias` | A qué carpeta aplica. |
+| Etiqueta | `Etiqueta` | Texto | Nombre visible en el formulario («¿Incluye cláusula antisoborno?»). |
+| Tipo de dato | `TipoDato` | Elección | `Texto` · `Numero` · `Fecha` · `Booleano` · `Opcion` |
+| Opciones | `Opciones` | Texto | Solo si `TipoDato = Opcion`: valores separados por `;`. |
+| Sección | `Seccion` | Texto | Agrupa el formulario («Datos logísticos», «Cláusulas corporativas»...). Las cláusulas son campos `Booleano` con `Seccion = "Cláusulas corporativas"` — no existe una lista aparte de cláusulas, es el mismo mecanismo. |
+| Obligatorio | `Obligatorio` | Sí/No | |
+| Orden | `Orden` | Número | Orden dentro de su sección. |
+| Ayuda | `Ayuda` | Texto | Texto de apoyo bajo el campo. |
+| Activo | `Activo` | Sí/No | Desactivar conserva los valores ya cargados en los contratos existentes. |
+
+### Ejemplo de siembra (ver `Seed-DemoData.ps1`)
+
+| Categoría | Campo | Tipo | Sección |
+|---|---|---|---|
+| Todas (sin categoría) | `ClausulaProteccionDatos` | Booleano | Cláusulas corporativas |
+| Todas (sin categoría) | `ClausulaAntisoborno` | Booleano | Cláusulas corporativas |
+| Todas (sin categoría) | `ClausulaSalida` | Booleano | Cláusulas corporativas |
+| Logística | `NumeroOrdenCompra` | Texto | Datos logísticos |
+| Logística | `IncotermPactado` | Opción (`EXW;FOB;CIF;DAP`) | Datos logísticos |
+| Legal | `JurisdiccionAplicable` | Texto | Datos legales |
+| Legal | `ClausulaConfidencialidadReforzada` | Booleano | Cláusulas corporativas |
+| RRHH | `PuestoONivel` | Texto | Datos de RRHH |
+
+Un campo sin `Categoria` (en blanco) se interpreta como **aplicable a todas**
+las categorías — así los tres checklists de cláusulas corporativas no hay que
+repetirlos en cada carpeta.
+
+---
+
+## 13. `ContratosCamposValor` — valores del esquema dinámico
+
+El valor de cada campo personalizado, uno por fila. Es el patrón **EAV**
+(entidad-atributo-valor): la única forma de tener campos que el administrador
+inventa sin rediseñar la lista `Contratos` cada vez.
+
+| Visible | Interno | Tipo | Notas |
+|---|---|---|---|
+| Referencia | `Title` | Texto | `<Código del contrato>-<Nombre técnico del campo>`, solo para lectura humana en SharePoint. |
+| Contrato | `Contrato` | Búsqueda → `Contratos` | |
+| Campo | `Campo` | Búsqueda → `CamposPersonalizados` | |
+| Valor texto | `ValorTexto` | Texto (255) | Se usa si `TipoDato` es `Texto` u `Opcion`. |
+| Valor número | `ValorNumero` | Número | Se usa si `TipoDato = Numero`. |
+| Valor fecha | `ValorFecha` | Fecha | Se usa si `TipoDato = Fecha`. |
+| Valor booleano | `ValorBooleano` | Sí/No | Se usa si `TipoDato = Booleano` (incluye las cláusulas). |
+
+**Por qué cuatro columnas de valor y no una sola de texto:** si todo se
+guardara como texto, ordenar por fecha o sumar un campo numérico dejaría de
+ser posible sin convertir cadenas en tiempo de ejecución. Separar por tipo
+mantiene esas operaciones nativas donde sí se necesitan (p. ej., si mañana se
+quiere alertar sobre un campo de fecha personalizado).
+
+---
+
+## Categorías, campos dinámicos y el mecanismo de esquema configurable {#13-categorias-camposdinámicos-y-el-mecanismo-de-esquema-configurable}
+
+### Qué resuelve y qué no reemplaza
+
+`Categoria` es un eje **nuevo e independiente** de `TipoContrato`:
+
+| | `TipoContrato` | `Categoria` |
+|---|---|---|
+| Quién lo mantiene | Catálogo fijo, definido en el despliegue | El administrador, desde la app, en cualquier momento |
+| Para qué sirve | Resolver la ruta de `MatrizAprobacion` (ver `docs/04-flujos-aprobacion.md`) | Organizar como carpetas y decidir qué campos/cláusulas pedir |
+| Qué pasa si se edita | Puede alterar rutas de aprobación ya calibradas | No afecta el workflow de aprobación en absoluto |
+
+Se mantuvieron separados a propósito: la matriz de aprobación depende de que
+`TipoContrato` sea estable y acotado. Un esquema que el administrador edita
+libremente no es el lugar correcto para colgar de él una decisión tan sensible
+como quién aprueba cuánto dinero.
+
+### Cómo se arma el formulario dinámico
+
+Al elegir una categoría en `scrEditar`, la app:
+
+1. Filtra `CamposPersonalizados` por `Categoria = la elegida` **o** `Categoria` en blanco (aplica a todas), `Activo = true`, ordenado por `Seccion` y `Orden`.
+2. Por cada campo, dibuja el control según `TipoDato` (`Switch` en Power Fx: `TextInput`, `DatePicker`, `Toggle`, `ComboBox`).
+3. Al guardar, escribe o actualiza una fila en `ContratosCamposValor` por cada campo con valor.
+
+El detalle línea por línea está en
+[`canvas-app/formulas/05-categorias-campos-dinamicos.md`](../canvas-app/formulas/05-categorias-campos-dinamicos.md).
+
+### El costo real: qué se puede filtrar rápido y qué no
+
+**Rápido y delegable:** listar o filtrar contratos por `Categoria` — es una
+columna de búsqueda normal e indexada en `Contratos`, igual que `Estado` o
+`TipoContrato`. La navegación tipo carpeta en la bandeja no tiene ningún costo
+adicional.
+
+**No delegable:** «mostrarme todos los contratos de Logística donde el
+Incoterm sea FOB». Eso exige filtrar primero `ContratosCamposValor` (una lista
+que crece con cada campo de cada contrato) para encontrar los `Contrato.Id`
+que califican, y recién después traer esos contratos — dos consultas
+encadenadas, la primera de ellas no delegable en SharePoint.
+
+**Mitigación aplicada:**
+
+- `ContratosCamposValor` se indexa por `Contrato` y por `Campo` (ver más abajo), de modo que las dos operaciones que sí son frecuentes —traer todos los valores de un contrato, y saber cuántos contratos tienen cierto campo con cierto valor cuando la lista aún es chica— siguen siendo razonablemente rápidas.
+- La búsqueda por campo dinámico está pensada para volúmenes moderados (cientos, no decenas de miles, de filas en `ContratosCamposValor` por campo). Si algún campo dinámico se vuelve crítico para reportes masivos, la salida limpia es "graduarlo": agregarlo como columna nativa de `Contratos` mediante el script de despliegue, y migrar sus valores desde `ContratosCamposValor` una sola vez. Es exactamente el mismo mecanismo por el que `MontoPEN` o `FechaPreaviso` son columnas reales y no campos dinámicos: son los dos valores que **sí** hace falta poder filtrar a escala desde el primer día.
+- Ningún campo dinámico participa en la resolución de la matriz de aprobación ni en las alertas de vencimiento estándar — ambas siguen operando sobre columnas nativas indexadas. La única alerta que sí lee `Categoria` es la de vencimiento, para copiar al `ResponsableAdicional` de la carpeta (ver `docs/04-flujos-aprobacion.md` y el flujo 04).
+
+---
+
 ## Índices y delegación
 
 SharePoint solo delega consultas eficientes sobre **columnas indexadas** y el umbral de
@@ -347,11 +489,13 @@ vista de lista es de **5 000 elementos**. El script de despliegue crea estos ín
 
 | Lista | Columnas indexadas |
 |---|---|
-| `Contratos` | `Estado`, `FechaFin`, `FechaPreaviso`, `TipoContrato`, `Contraparte`, `EstadoCustodia` |
+| `Contratos` | `Estado`, `FechaFin`, `FechaPreaviso`, `TipoContrato`, `Contraparte`, `EstadoCustodia`, `Categoria` |
 | `Aprobaciones` | `Contrato`, `Decision` |
 | `DocumentosContratos` | `Contrato` |
 | `MovimientosCustodia` | `Contrato`, `FechaDevolucionReal` |
 | `Alertas` | `Contrato` |
+| `CamposPersonalizados` | `Categoria` |
+| `ContratosCamposValor` | `Contrato`, `Campo` |
 
 **Funciones delegables** que usa la app sobre estas columnas: `Filter`, `Search`,
 `LookUp`, `SortByColumns` con `=`, `<>`, `<`, `>`, `StartsWith`, `And`, `Or`.

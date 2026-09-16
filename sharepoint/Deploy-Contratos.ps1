@@ -3,7 +3,7 @@
     Aprovisiona el sitio de SharePoint Online del Sistema de Contratos.
 
 .DESCRIPTION
-    Crea (opcionalmente) el sitio, y dentro de el las 9 listas y la biblioteca
+    Crea (opcionalmente) el sitio, y dentro de el las 13 listas y la biblioteca
     documental descritas en docs/02-modelo-datos.md, con todas sus columnas,
     opciones, valores por defecto, indices y vistas.
 
@@ -323,7 +323,7 @@ $EstadosContrato = @(
 #  1. AREAS   (se crea primero: es destino de un lookup)
 # ============================================================================
 
-Write-Paso "1/10  Lista 'Areas'"
+Write-Paso "1/13  Lista 'Areas'"
 $lstAreas = New-ListaSiNoExiste -Title 'Areas' -Url 'Lists/Areas' `
     -Description 'Catalogo de areas de la organizacion. Resuelve los roles Jefe y Gerente de area.' `
     -DisableAttachments
@@ -340,7 +340,7 @@ $lstAreas = New-ListaSiNoExiste -Title 'Areas' -Url 'Lists/Areas' `
 #  2. PARAMETROS
 # ============================================================================
 
-Write-Paso "2/10  Lista 'Parametros'"
+Write-Paso "2/13  Lista 'Parametros'"
 $lstParam = New-ListaSiNoExiste -Title 'Parametros' -Url 'Lists/Parametros' `
     -Description 'Configuracion global del sistema. Title = clave.' `
     -DisableAttachments
@@ -352,10 +352,57 @@ $lstParam = New-ListaSiNoExiste -Title 'Parametros' -Url 'Lists/Parametros' `
 ) | ForEach-Object { Add-Columna -Lista $lstParam -Definicion $_ }
 
 # ============================================================================
-#  3. CONTRATOS   (maestro)
+#  3. CATEGORIAS   (carpetas administrables, esquema configurable)
 # ============================================================================
 
-Write-Paso "3/10  Lista 'Contratos'"
+Write-Paso "3/13  Lista 'Categorias'"
+$lstCategorias = New-ListaSiNoExiste -Title 'Categorias' -Url 'Lists/Categorias' `
+    -Description 'Carpetas administrables (Logistica, Comercial, RRHH, Legal...). Determinan que campos y clausulas se piden en cada contrato.' `
+    -DisableAttachments
+
+@(
+    @{ Name = 'CategoriaPadre';      Display = 'Categoria padre';      Type = 'Lookup'; LookupList = $null; LookupField = 'Title' }
+    @{ Name = 'Icono';               Display = 'Icono';                Type = 'Text'; MaxLength = 60 }
+    @{ Name = 'Color';               Display = 'Color';                Type = 'Text'; MaxLength = 10 }
+    @{ Name = 'ResponsableAdicional';Display = 'Responsable adicional';Type = 'User' }
+    @{ Name = 'Orden';               Display = 'Orden';                Type = 'Number'; Decimals = 0; Default = 0; AddToView = $true }
+    @{ Name = 'Activo';              Display = 'Activo';               Type = 'Boolean'; Default = 1; AddToView = $true }
+) | ForEach-Object {
+    # CategoriaPadre es un lookup de la lista sobre si misma: recien existe su Id
+    # despues de New-ListaSiNoExiste, asi que se resuelve aqui en vez de en la
+    # definicion literal de arriba.
+    if ($_.Name -eq 'CategoriaPadre') { $_.LookupList = $lstCategorias.Id }
+    Add-Columna -Lista $lstCategorias -Definicion $_
+}
+
+# ============================================================================
+#  4. CAMPOS PERSONALIZADOS   (esquema por categoria)
+# ============================================================================
+
+Write-Paso "4/13  Lista 'CamposPersonalizados'"
+$lstCampos = New-ListaSiNoExiste -Title 'CamposPersonalizados' -Url 'Lists/CamposPersonalizados' `
+    -Description 'Define los campos adicionales y clausulas de cada categoria. Editar esta lista equivale a agregar una columna, sin tocar SharePoint.' `
+    -DisableAttachments
+
+Set-PnPField -List 'CamposPersonalizados' -Identity 'Title' -Values @{ Title = 'Nombre tecnico' } -ErrorAction SilentlyContinue | Out-Null
+
+@(
+    @{ Name = 'Categoria';   Display = 'Categoria';    Type = 'Lookup'; LookupList = $lstCategorias.Id; LookupField = 'Title'; Indexed = $true; AddToView = $true }
+    @{ Name = 'Etiqueta';    Display = 'Etiqueta';     Type = 'Text'; MaxLength = 150; Required = $true; AddToView = $true }
+    @{ Name = 'TipoDato';    Display = 'Tipo de dato'; Type = 'Choice'; Choices = @('Texto','Numero','Fecha','Booleano','Opcion'); Required = $true; AddToView = $true }
+    @{ Name = 'Opciones';    Display = 'Opciones';     Type = 'Text'; MaxLength = 255 }
+    @{ Name = 'Seccion';     Display = 'Seccion';      Type = 'Text'; MaxLength = 100; AddToView = $true }
+    @{ Name = 'Obligatorio'; Display = 'Obligatorio';  Type = 'Boolean'; Default = 0 }
+    @{ Name = 'Orden';       Display = 'Orden';        Type = 'Number'; Decimals = 0; Default = 0 }
+    @{ Name = 'Ayuda';       Display = 'Ayuda';        Type = 'Text'; MaxLength = 255 }
+    @{ Name = 'Activo';      Display = 'Activo';       Type = 'Boolean'; Default = 1; AddToView = $true }
+) | ForEach-Object { Add-Columna -Lista $lstCampos -Definicion $_ }
+
+# ============================================================================
+#  5. CONTRATOS   (maestro)
+# ============================================================================
+
+Write-Paso "5/13  Lista 'Contratos'"
 $lstContratos = New-ListaSiNoExiste -Title 'Contratos' -Url 'Lists/Contratos' `
     -Description 'Maestro de contratos. Una fila = un contrato.' `
     -EnableVersioning
@@ -368,6 +415,7 @@ Set-PnPField -List 'Contratos' -Identity 'Title' -Values @{ Title = 'Codigo'; Re
     @{ Name = 'TipoContrato';    Display = 'Tipo de contrato';    Type = 'Choice'; Choices = $TiposContrato; Required = $true; Indexed = $true; AddToView = $true }
     @{ Name = 'ObjetoContrato';  Display = 'Objeto del contrato'; Type = 'Note'; NumLines = 6 }
     @{ Name = 'ContratoPadre';   Display = 'Contrato relacionado'; Type = 'Lookup'; LookupList = $lstContratos.Id; LookupField = 'Title' }
+    @{ Name = 'Categoria';       Display = 'Categoria';            Type = 'Lookup'; LookupList = $lstCategorias.Id; LookupField = 'Title'; Indexed = $true; AddToView = $true }
 
     # --- Contraparte
     @{ Name = 'Contraparte';         Display = 'Contraparte';           Type = 'Text'; MaxLength = 255; Required = $true; Indexed = $true; AddToView = $true }
@@ -444,10 +492,10 @@ Add-Vista -Lista $lstContratos -Titulo 'Custodia fisica' `
     -Query '<Where><Neq><FieldRef Name="EstadoCustodia" /><Value Type="Choice">Solo digital</Value></Neq></Where>'
 
 # ============================================================================
-#  4. BIBLIOTECA DocumentosContratos
+#  6. BIBLIOTECA DocumentosContratos
 # ============================================================================
 
-Write-Paso "4/10  Biblioteca 'DocumentosContratos'"
+Write-Paso "6/13  Biblioteca 'DocumentosContratos'"
 $lstDocs = New-ListaSiNoExiste -Title 'DocumentosContratos' -Url 'DocumentosContratos' `
     -Template DocumentLibrary `
     -Description 'Custodia digital. Todos los documentos del expediente de cada contrato.' `
@@ -464,10 +512,10 @@ $lstDocs = New-ListaSiNoExiste -Title 'DocumentosContratos' -Url 'DocumentosCont
 ) | ForEach-Object { Add-Columna -Lista $lstDocs -Definicion $_ }
 
 # ============================================================================
-#  5. MATRIZ DE APROBACION
+#  7. MATRIZ DE APROBACION
 # ============================================================================
 
-Write-Paso "5/10  Lista 'MatrizAprobacion'"
+Write-Paso "7/13  Lista 'MatrizAprobacion'"
 $lstMatriz = New-ListaSiNoExiste -Title 'MatrizAprobacion' -Url 'Lists/MatrizAprobacion' `
     -Description 'Reglas del workflow. Cambiar quien aprueba NO requiere modificar el flujo.' `
     -EnableVersioning -DisableAttachments
@@ -488,10 +536,10 @@ Set-PnPField -List 'MatrizAprobacion' -Identity 'Title' -Values @{ Title = 'Regl
 ) | ForEach-Object { Add-Columna -Lista $lstMatriz -Definicion $_ }
 
 # ============================================================================
-#  6. APROBACIONES (historial)
+#  8. APROBACIONES (historial)
 # ============================================================================
 
-Write-Paso "6/10  Lista 'Aprobaciones'"
+Write-Paso "8/13  Lista 'Aprobaciones'"
 $lstAprob = New-ListaSiNoExiste -Title 'Aprobaciones' -Url 'Lists/Aprobaciones' `
     -Description 'Historial inmutable de decisiones de aprobacion. Evidencia de auditoria.' `
     -DisableAttachments
@@ -518,10 +566,10 @@ Add-Vista -Lista $lstAprob -Titulo 'Pendientes' `
     -Query '<Where><Eq><FieldRef Name="Decision" /><Value Type="Choice">Pendiente</Value></Eq></Where><OrderBy><FieldRef Name="FechaSolicitud" Ascending="TRUE" /></OrderBy>'
 
 # ============================================================================
-#  7. ADENDAS
+#  9. ADENDAS
 # ============================================================================
 
-Write-Paso "7/10  Lista 'Adendas'"
+Write-Paso "9/13  Lista 'Adendas'"
 $lstAdendas = New-ListaSiNoExiste -Title 'Adendas' -Url 'Lists/Adendas' `
     -Description 'Modificaciones contractuales. Reevaluan la matriz sobre el monto acumulado.' `
     -EnableVersioning
@@ -540,10 +588,10 @@ Set-PnPField -List 'Adendas' -Identity 'Title' -Values @{ Title = 'Codigo' } -Er
 ) | ForEach-Object { Add-Columna -Lista $lstAdendas -Definicion $_ }
 
 # ============================================================================
-#  8. MOVIMIENTOS DE CUSTODIA
+#  10. MOVIMIENTOS DE CUSTODIA
 # ============================================================================
 
-Write-Paso "8/10  Lista 'MovimientosCustodia'"
+Write-Paso "10/13 Lista 'MovimientosCustodia'"
 $lstCustodia = New-ListaSiNoExiste -Title 'MovimientosCustodia' -Url 'Lists/MovimientosCustodia' `
     -Description 'Cadena de custodia del documento original: recepcion, prestamos, devoluciones y bajas.'
 
@@ -568,10 +616,10 @@ Add-Vista -Lista $lstCustodia -Titulo 'Prestamos abiertos' `
     -Query '<Where><And><Eq><FieldRef Name="TipoMovimiento" /><Value Type="Choice">Prestamo</Value></Eq><IsNull><FieldRef Name="FechaDevolucionReal" /></IsNull></And></Where><OrderBy><FieldRef Name="FechaCompromisoDevolucion" Ascending="TRUE" /></OrderBy>'
 
 # ============================================================================
-#  9. ALERTAS
+#  11. ALERTAS
 # ============================================================================
 
-Write-Paso "9/10  Lista 'Alertas'"
+Write-Paso "11/13 Lista 'Alertas'"
 $lstAlertas = New-ListaSiNoExiste -Title 'Alertas' -Url 'Lists/Alertas' `
     -Description 'Bitacora de notificaciones enviadas. Evita duplicados.' `
     -DisableAttachments
@@ -588,10 +636,10 @@ Set-PnPField -List 'Alertas' -Identity 'Title' -Values @{ Title = 'Referencia' }
 ) | ForEach-Object { Add-Columna -Lista $lstAlertas -Definicion $_ }
 
 # ============================================================================
-#  10. BITACORA
+#  12. BITACORA
 # ============================================================================
 
-Write-Paso "10/10 Lista 'Bitacora'"
+Write-Paso "12/13 Lista 'Bitacora'"
 $lstBitacora = New-ListaSiNoExiste -Title 'Bitacora' -Url 'Lists/Bitacora' `
     -Description 'Auditoria funcional de las acciones realizadas desde la aplicacion.' `
     -DisableAttachments
@@ -605,6 +653,26 @@ Set-PnPField -List 'Bitacora' -Identity 'Title' -Values @{ Title = 'Referencia' 
     @{ Name = 'Fecha';    Display = 'Fecha';    Type = 'DateTime'; AddToView = $true }
     @{ Name = 'Detalle';  Display = 'Detalle';  Type = 'Note'; NumLines = 4 }
 ) | ForEach-Object { Add-Columna -Lista $lstBitacora -Definicion $_ }
+
+# ============================================================================
+#  13. CONTRATOS CAMPOS VALOR   (EAV: valores del esquema dinamico)
+# ============================================================================
+
+Write-Paso "13/13 Lista 'ContratosCamposValor'"
+$lstCamposValor = New-ListaSiNoExiste -Title 'ContratosCamposValor' -Url 'Lists/ContratosCamposValor' `
+    -Description 'Valor de cada campo personalizado, uno por fila (patron EAV). Es como se guardan los campos y clausulas que el administrador agrega desde CamposPersonalizados.' `
+    -DisableAttachments
+
+Set-PnPField -List 'ContratosCamposValor' -Identity 'Title' -Values @{ Title = 'Referencia' } -ErrorAction SilentlyContinue | Out-Null
+
+@(
+    @{ Name = 'Contrato';      Display = 'Contrato';      Type = 'Lookup'; LookupList = $lstContratos.Id; LookupField = 'Title'; Required = $true; Indexed = $true; AddToView = $true }
+    @{ Name = 'Campo';         Display = 'Campo';         Type = 'Lookup'; LookupList = $lstCampos.Id; LookupField = 'Title'; Required = $true; Indexed = $true; AddToView = $true }
+    @{ Name = 'ValorTexto';    Display = 'Valor texto';   Type = 'Text'; MaxLength = 255 }
+    @{ Name = 'ValorNumero';   Display = 'Valor numero';  Type = 'Number'; Decimals = 4; Min = -999999999 }
+    @{ Name = 'ValorFecha';    Display = 'Valor fecha';   Type = 'DateTime'; DateOnly = $true }
+    @{ Name = 'ValorBooleano'; Display = 'Valor booleano';Type = 'Boolean' }
+) | ForEach-Object { Add-Columna -Lista $lstCamposValor -Definicion $_ }
 
 # ============================================================================
 #  CIERRE

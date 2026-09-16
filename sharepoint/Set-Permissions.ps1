@@ -216,8 +216,11 @@ Set-PermisosLista -Lista 'MatrizAprobacion' -Permisos @{
     'Contratos - Consulta'        = 'Read'
 }
 
-# --- Parametros y Areas: configuracion. Lectura para todos, escritura para el admin.
-foreach ($lista in @('Parametros', 'Areas')) {
+# --- Parametros, Areas, Categorias y CamposPersonalizados: configuracion.
+#     Lectura para todos, escritura para el admin. Categorias y sus campos son
+#     el mismo tipo de dato de configuracion que Areas: el usuario final las ve
+#     y las usa (categoriza contratos, llena campos), pero no las edita.
+foreach ($lista in @('Parametros', 'Areas', 'Categorias', 'CamposPersonalizados')) {
     Set-PermisosLista -Lista $lista -Permisos @{
         'Contratos - Administradores' = 'Full Control'
         'Contratos - Legal'           = 'Read'
@@ -242,6 +245,18 @@ Set-PermisosLista -Lista 'Adendas' -Permisos @{
     'Contratos - Administradores' = 'Full Control'
     'Contratos - Legal'           = 'Aportar sin eliminar'
     'Contratos - Solicitantes'    = 'Aportar sin eliminar'
+    'Contratos - Aprobadores'     = 'Read'
+    'Contratos - Consulta'        = 'Read'
+}
+
+# --- Valores de campos personalizados (EAV): se llenan al registrar el
+#     contrato, igual que Adendas. Nadie los borra: un campo que deja de
+#     aplicar se desactiva en CamposPersonalizados, no se le borra el valor.
+Set-PermisosLista -Lista 'ContratosCamposValor' -Permisos @{
+    'Contratos - Administradores' = 'Full Control'
+    'Contratos - Legal'           = 'Aportar sin eliminar'
+    'Contratos - Solicitantes'    = 'Aportar sin eliminar'
+    'Contratos - Custodios'       = 'Aportar sin eliminar'
     'Contratos - Aprobadores'     = 'Read'
     'Contratos - Consulta'        = 'Read'
 }

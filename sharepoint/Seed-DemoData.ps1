@@ -139,6 +139,80 @@ Write-Aviso "Asigna 'Responsable' y 'Gerente' en cada area: de ahi salen los apr
 Write-Aviso "de los roles 'Jefe de area' y 'Gerente de area' de la matriz."
 
 # ============================================================================
+#  CATEGORIAS Y CAMPOS PERSONALIZADOS  (esquema configurable, ejemplo)
+# ============================================================================
+
+Write-Paso "Categorias (carpetas administrables)"
+
+$categorias = @(
+    @{ N = 'Logistica';      Icono = 'Icon.Truck';       Color = '#994d1b' }
+    @{ N = 'Comercial';      Icono = 'Icon.Money';       Color = '#A8692B' }
+    @{ N = 'Administrativo'; Icono = 'Icon.OfficeBuilding'; Color = '#681029' }
+    @{ N = 'Recursos Humanos'; Icono = 'Icon.Education'; Color = '#375623' }
+    @{ N = 'Legal';          Icono = 'Icon.LibraryBooks'; Color = '#4e0c1f' }
+)
+
+foreach ($c in $categorias) {
+    Add-ElementoUnico -Lista 'Categorias' -Title $c.N -Valores @{
+        Icono = $c.Icono; Color = $c.Color; Orden = 0; Activo = $true
+    }
+}
+
+Write-Aviso "Asigna 'Responsable adicional' en las categorias que deban copiar a alguien"
+Write-Aviso "mas (p. ej. Compras) en las alertas de vencimiento de esa carpeta."
+
+Write-Paso "Campos personalizados (esquema por categoria)"
+
+# Sin categoria = aplica a todos los contratos, cualquiera sea su carpeta.
+# Es el mecanismo con el que se define un checklist de clausulas corporativas
+# unico, sin repetirlo en cada categoria.
+$camposGlobales = @(
+    @{ N = 'ClausulaProteccionDatos';  Etiqueta = 'Clausula de proteccion de datos';       Seccion = 'Clausulas corporativas' }
+    @{ N = 'ClausulaAntisoborno';      Etiqueta = 'Clausula antisoborno y anticorrupcion'; Seccion = 'Clausulas corporativas' }
+    @{ N = 'ClausulaSalida';           Etiqueta = 'Clausula de salida / resolucion anticipada'; Seccion = 'Clausulas corporativas' }
+    @{ N = 'ClausulaConfidencialidad'; Etiqueta = 'Clausula de confidencialidad';          Seccion = 'Clausulas corporativas' }
+)
+
+$orden = 1
+foreach ($cg in $camposGlobales) {
+    Add-ElementoUnico -Lista 'CamposPersonalizados' -Title $cg.N -Valores @{
+        Etiqueta = $cg.Etiqueta; TipoDato = 'Booleano'; Seccion = $cg.Seccion
+        Obligatorio = $false; Orden = $orden; Activo = $true
+    }
+    $orden++
+}
+
+# Campos especificos de ejemplo, uno por categoria, para mostrar el patron.
+# El administrador agrega los que realmente necesite desde la app.
+$idLogistica = (Get-PnPListItem -List 'Categorias' -Query "<View><Query><Where><Eq><FieldRef Name='Title' /><Value Type='Text'>Logistica</Value></Eq></Where></Query></View>")
+$idLogistica = if ($null -ne $idLogistica -and @($idLogistica).Count -gt 0) { @($idLogistica)[0].Id } else { $null }
+
+$idLegal = (Get-PnPListItem -List 'Categorias' -Query "<View><Query><Where><Eq><FieldRef Name='Title' /><Value Type='Text'>Legal</Value></Eq></Where></Query></View>")
+$idLegal = if ($null -ne $idLegal -and @($idLegal).Count -gt 0) { @($idLegal)[0].Id } else { $null }
+
+if ($idLogistica) {
+    Add-ElementoUnico -Lista 'CamposPersonalizados' -Title 'NumeroOrdenCompra' -Valores @{
+        Categoria = $idLogistica; Etiqueta = 'Numero de orden de compra'; TipoDato = 'Texto'
+        Seccion = 'Datos logisticos'; Obligatorio = $false; Orden = 1; Activo = $true
+    }
+    Add-ElementoUnico -Lista 'CamposPersonalizados' -Title 'IncotermPactado' -Valores @{
+        Categoria = $idLogistica; Etiqueta = 'Incoterm pactado'; TipoDato = 'Opcion'
+        Opciones = 'EXW;FOB;CIF;DAP'; Seccion = 'Datos logisticos'; Obligatorio = $false; Orden = 2; Activo = $true
+    }
+}
+
+if ($idLegal) {
+    Add-ElementoUnico -Lista 'CamposPersonalizados' -Title 'JurisdiccionAplicable' -Valores @{
+        Categoria = $idLegal; Etiqueta = 'Jurisdiccion aplicable'; TipoDato = 'Texto'
+        Seccion = 'Datos legales'; Obligatorio = $false; Orden = 1; Activo = $true
+    }
+}
+
+Write-Aviso "Las categorias y campos cargados son un EJEMPLO minimo. Agrega, desde"
+Write-Aviso "la pantalla de administracion o la lista CamposPersonalizados, los que"
+Write-Aviso "correspondan a cada area real de la organizacion."
+
+# ============================================================================
 #  MATRIZ DE APROBACION  (EJEMPLO - AJUSTAR A LA ORGANIZACION)
 # ============================================================================
 

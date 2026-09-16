@@ -5,13 +5,34 @@
 # formulario. Aquí se declara el formulario y la lógica que lo rodea; los
 # valores predeterminados, la visibilidad condicional de cada tarjeta y las
 # validaciones están en canvas-app/formulas/02-detalle-y-edicion.md.
+#
+# El panel de la derecha (galCamposDinamicos) es el formulario dinámico por
+# categoría: campos y cláusulas que el administrador define en
+# CamposPersonalizados, sin tocar SharePoint. El mecanismo completo —por qué
+# se guarda en una colección local antes que en SharePoint, y por qué el
+# guardado real ocurre recién en frmContrato.OnSuccess— está explicado en
+# canvas-app/formulas/05-categorias-campos-dinamicos.md.
 Screens:
   scrEditar:
     Properties:
       Fill: =gblTema.Fondo
       OnVisible: |-
         =If(gblModoEdicion = "Nuevo", NewForm(frmContrato), EditForm(frmContrato));
-        UpdateContext({locError: ""})
+        UpdateContext({locError: ""});
+        Set(gblCategoriaFormId, Coalesce(gblContrato.Categoria.Id, 0));
+        ClearCollect(colCamposDinamicos,
+            AddColumns(
+                Filter(CamposPersonalizados, Activo = true,
+                    IsBlank(Categoria) || Categoria.Id = gblCategoriaFormId),
+                "ValorActual",
+                Switch(TipoDato.Value,
+                    "Booleano", LookUp(ContratosCamposValor, Contrato.Id = gblContrato.ID, Campo.Id = ID).ValorBooleano,
+                    "Numero",   LookUp(ContratosCamposValor, Contrato.Id = gblContrato.ID, Campo.Id = ID).ValorNumero,
+                    "Fecha",    LookUp(ContratosCamposValor, Contrato.Id = gblContrato.ID, Campo.Id = ID).ValorFecha,
+                    LookUp(ContratosCamposValor, Contrato.Id = gblContrato.ID, Campo.Id = ID).ValorTexto
+                )
+            )
+        )
     Children:
       - recCabeceraE:
           Control: Rectangle
@@ -104,7 +125,7 @@ Screens:
             Item: =gblContrato
             X: =24
             Y: =116
-            Width: =Parent.Width - 48
+            Width: =(Parent.Width - 72) * 0.58
             Height: =Parent.Height - 148
             Columns: =2
             OnSuccess: |-
@@ -118,6 +139,181 @@ Screens:
                   Accion: If(gblModoEdicion = "Nuevo", "Creación", "Modificación"),
                   Usuario: gblUsuario, Fecha: Now(),
                   Detalle: "Registro guardado desde la aplicación."});
+              // Recien aqui el contrato tiene un ID real de SharePoint: solo
+              // ahora se pueden escribir sus campos dinamicos en el patron EAV.
+              // Detalle completo: canvas-app/formulas/05-categorias-campos-dinamicos.md
+              ForAll(colCamposDinamicos As _c,
+                  If(!IsBlank(_c.ValorActual),
+                      With({_existente: LookUp(ContratosCamposValor, Contrato.Id = gblContrato.ID, Campo.Id = _c.ID)},
+                          Patch(ContratosCamposValor,
+                              If(IsBlank(_existente), Defaults(ContratosCamposValor), _existente),
+                              {
+                                  Title: gblContrato.Title & "-" & _c.Title,
+                                  Contrato: {Id: gblContrato.ID, Value: gblContrato.Title},
+                                  Campo: {Id: _c.ID, Value: _c.Title},
+                                  ValorTexto:    If(_c.TipoDato.Value = "Texto" || _c.TipoDato.Value = "Opcion", Text(_c.ValorActual), Blank()),
+                                  ValorNumero:   If(_c.TipoDato.Value = "Numero", Value(_c.ValorActual), Blank()),
+                                  ValorFecha:    If(_c.TipoDato.Value = "Fecha", _c.ValorActual, Blank()),
+                                  ValorBooleano: If(_c.TipoDato.Value = "Booleano", _c.ValorActual, Blank())
+                              }
+                          )
+                      )
+                  )
+              );
               Navigate(scrDetalle, ScreenTransition.UnCover)
             OnFailure: |-
               =Notify("No se pudo guardar: " & frmContrato.Error, NotificationType.Error, 8000)
+
+      # --- Campos adicionales por categoría (esquema dinámico) ---------------
+      - recPanelCampos:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Tarjeta
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            X: =24 + (Parent.Width - 72) * 0.58 + 24
+            Y: =116
+            Width: =(Parent.Width - 72) * 0.42
+            Height: =Parent.Height - 148
+      - lblPanelCamposTitulo:
+          Control: Label
+          Properties:
+            Text: ="Campos adicionales de la categoría"
+            X: =24 + (Parent.Width - 72) * 0.58 + 40
+            Y: =128
+            Width: =(Parent.Width - 72) * 0.42 - 32
+            Height: =28
+            Size: =16
+            FontWeight: =FontWeight.Semibold
+      - lblPanelCamposAyuda:
+          Control: Label
+          Properties:
+            Text: |-
+              ="Cambian según la categoría elegida en el formulario. Incluyen el checklist de cláusulas corporativas."
+            X: =24 + (Parent.Width - 72) * 0.58 + 40
+            Y: =156
+            Width: =(Parent.Width - 72) * 0.42 - 32
+            Height: =36
+            Size: =gblTema.FuenteMenor
+            Color: =gblTema.TextoSuave
+      - lblSinCampos:
+          Control: Label
+          Properties:
+            Text: ="Esta categoría no tiene campos adicionales configurados."
+            X: =24 + (Parent.Width - 72) * 0.58 + 40
+            Y: =200
+            Width: =(Parent.Width - 72) * 0.42 - 32
+            Height: =32
+            Color: =gblTema.TextoSuave
+            Size: =gblTema.FuenteMenor
+            Visible: =CountRows(colCamposDinamicos) = 0
+      - galCamposDinamicos:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24 + (Parent.Width - 72) * 0.58 + 24
+            Y: =200
+            Width: =(Parent.Width - 72) * 0.42
+            Height: =Parent.Height - 232
+            TemplateSize: =76
+            Items: |-
+              =SortByColumns(SortByColumns(colCamposDinamicos, "Orden", SortOrder.Ascending), "Seccion", SortOrder.Ascending)
+          Children:
+            - lblCampoSeccion:
+                # Se muestra en cada fila, no solo en la primera de su sección:
+                # detectar "cambio de sección" en una galería exigiría suponer
+                # IDs consecutivos, que SharePoint no garantiza. Repetir la
+                # etiqueta es el precio simple y correcto de evitar esa trampa.
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Seccion
+                  X: =16
+                  Y: =0
+                  Width: =Parent.TemplateWidth - 32
+                  Height: =18
+                  Size: =10
+                  Color: =gblTema.Info
+                  FontWeight: =FontWeight.Semibold
+            - lblCampoEtiqueta:
+                Control: Label
+                Properties:
+                  Text: |-
+                    =ThisItem.Etiqueta & If(ThisItem.Obligatorio, " *", "")
+                  X: =16
+                  Y: =18
+                  Width: =Parent.TemplateWidth - 32
+                  Height: =22
+                  Size: =gblTema.FuenteBase
+            - txtCampoTexto:
+                Control: Classic/TextInput
+                Properties:
+                  Default: =ThisItem.ValorActual
+                  X: =16
+                  Y: =42
+                  Width: =Parent.TemplateWidth - 32
+                  Height: =32
+                  BorderColor: =gblTema.Borde
+                  Visible: =ThisItem.TipoDato.Value = "Texto"
+                  OnChange: |-
+                    =Patch(colCamposDinamicos, ThisItem, {ValorActual: Self.Text})
+            - cmbCampoOpcion:
+                Control: Classic/ComboBox
+                Properties:
+                  Items: =Split(ThisItem.Opciones, ";")
+                  DisplayFields: =["Value"]
+                  SearchFields: =["Value"]
+                  SelectMultiple: =false
+                  X: =16
+                  Y: =42
+                  Width: =Parent.TemplateWidth - 32
+                  Height: =32
+                  Visible: =ThisItem.TipoDato.Value = "Opcion"
+                  OnChange: |-
+                    =Patch(colCamposDinamicos, ThisItem, {ValorActual: Self.Selected.Value})
+            - txtCampoNumero:
+                Control: Classic/TextInput
+                Properties:
+                  Default: =Text(ThisItem.ValorActual)
+                  Format: =TextFormat.Number
+                  X: =16
+                  Y: =42
+                  Width: =Parent.TemplateWidth - 32
+                  Height: =32
+                  BorderColor: =gblTema.Borde
+                  Visible: =ThisItem.TipoDato.Value = "Numero"
+                  OnChange: |-
+                    =Patch(colCamposDinamicos, ThisItem, {ValorActual: Value(Self.Text)})
+            - dteCampoFecha:
+                Control: Classic/DatePicker
+                Properties:
+                  DefaultDate: =ThisItem.ValorActual
+                  X: =16
+                  Y: =42
+                  Width: =Parent.TemplateWidth - 32
+                  Height: =32
+                  Visible: =ThisItem.TipoDato.Value = "Fecha"
+                  OnChange: |-
+                    =Patch(colCamposDinamicos, ThisItem, {ValorActual: Self.SelectedDate})
+            - tglCampoBooleano:
+                Control: Classic/Toggle
+                Properties:
+                  Default: =Coalesce(ThisItem.ValorActual, false)
+                  X: =16
+                  Y: =40
+                  Width: =70
+                  Height: =28
+                  Visible: =ThisItem.TipoDato.Value = "Booleano"
+                  OnChange: |-
+                    =Patch(colCamposDinamicos, ThisItem, {ValorActual: Self.Value})
+            - lblCampoAyuda:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Ayuda
+                  X: =16
+                  Y: =62
+                  Width: =Parent.TemplateWidth - 32
+                  Height: =14
+                  Size: =9
+                  Color: =gblTema.TextoSuave
+                  Visible: =!IsBlank(ThisItem.Ayuda)

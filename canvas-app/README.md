@@ -1,16 +1,16 @@
 # Aplicación de lienzo «Contratos»
 
 Siete pantallas sobre las listas de SharePoint, con el workflow de aprobación
-disparado desde la ficha del contrato.
+disparado desde la ficha del contrato y la paleta corporativa de AB Mauri.
 
 ```
 scrInicio        Tablero: indicadores, mis aprobaciones, próximos vencimientos
-scrBandeja       Búsqueda y listado con filtros delegados
-scrDetalle       Ficha del contrato con seis pestañas
-scrEditar        Alta y edición, con validaciones previas al guardado
+scrBandeja       Búsqueda, filtros delegados y navegación por carpetas (categorías)
+scrDetalle       Ficha del contrato con siete pestañas, incluida vista previa de PDF
+scrEditar        Alta y edición, con formulario dinámico por categoría
 scrAprobaciones  Seguimiento de lo pendiente y control de SLA
 scrCustodia      Cadena de custodia del original: recepción, préstamo, devolución
-scrAdmin         Matriz de aprobación, parámetros, áreas y simulador de ruta
+scrAdmin         Matriz de aprobación, parámetros, áreas, categorías y simulador de ruta
 ```
 
 ---
@@ -36,6 +36,7 @@ haya 8 000 contratos en lugar de 80.
 | [`formulas/02-detalle-y-edicion.md`](formulas/02-detalle-y-edicion.md) | Ficha, barra de acciones, envío a aprobación, renovación y formulario |
 | [`formulas/03-aprobaciones-y-custodia.md`](formulas/03-aprobaciones-y-custodia.md) | Seguimiento de aprobaciones y movimientos de custodia |
 | [`formulas/04-administracion.md`](formulas/04-administracion.md) | Matriz, parámetros, áreas y simulador de ruta |
+| [`formulas/05-categorias-campos-dinamicos.md`](formulas/05-categorias-campos-dinamicos.md) | Carpetas, esquema de campos configurable, cláusulas y vista previa de documentos |
 
 ---
 
@@ -91,10 +92,10 @@ app en el estado que Studio espera.
    *Tableta*. Nómbrala `Contratos`.
 
 2. **Conectar los datos**: *Datos* → *Agregar datos* → *SharePoint* → el sitio →
-   selecciona las 10 listas
+   selecciona las 13 listas
    (`Contratos`, `DocumentosContratos`, `MatrizAprobacion`, `Aprobaciones`,
    `Adendas`, `MovimientosCustodia`, `Areas`, `Parametros`, `Alertas`,
-   `Bitacora`).
+   `Bitacora`, `Categorias`, `CamposPersonalizados`, `ContratosCamposValor`).
 
 3. **Conectar los conectores**: `Office365Users` y `Office365Outlook`.
 
@@ -122,8 +123,14 @@ app en el estado que Studio espera.
 | Punto | Por qué |
 |---|---|
 | `ADMINS`, `CUSTODIOS`, `LEGAL` en la lista `Parametros` | Están **vacíos** tras el despliegue. Sin ellos la app oculta la administración y los botones de custodia para todos. |
-| Colores de `gblTema` | Los tres primeros (`Primario`, `PrimarioOscuro`, `PrimarioSuave`) son un azul neutro de ejemplo. |
 | Nombre interno del flujo | Power Apps lo deriva del nombre visible; verifica el que te asigna. |
+| Categorías y campos de ejemplo | `Seed-DemoData.ps1` carga solo 5 categorías y un puñado de campos mínimos. Complétalos desde **Administración → Categorías** con los reales de la organización. |
+
+> **Colores.** `gblTema` en `App.fx.yaml` ya trae la paleta corporativa de
+> AB Mauri (granate, naranja, dorado — fuente: el estándar de los tableros
+> HTML de Financial Review, Costos, Compras, Nómina y Cuentas por Cobrar). Si
+> la marca cambia, es el único lugar que hay que tocar: ninguna pantalla usa
+> color literal.
 
 ---
 
@@ -164,3 +171,14 @@ para arrancar.
   es columna de persona). En `formulas/01-inicio-y-bandeja.md` está explicado el
   arreglo limpio: una columna de texto `ResponsableEmail` indexada, mantenida por
   el flujo.
+- **`frmRegla`** (alta y edición de reglas de la matriz de aprobación) está
+  especificado en `formulas/04-administracion.md` pero **no** implementado en
+  el YAML — hoy esa sección de `scrAdmin` solo activa/desactiva reglas
+  existentes. Se detectó al construir el CRUD de categorías (`frmCategoria` /
+  `frmCampo`, en `formulas/05-categorias-campos-dinamicos.md`), que sigue
+  exactamente el mismo patrón y se puede usar de referencia para completarlo.
+- El control nativo **Visor de PDF** (vista previa de documentos en
+  `scrDetalle`) no se declara en el YAML: su identificador de control no está
+  verificado contra un entorno real. El marco y la fórmula ya están listos en
+  `formulas/05-categorias-campos-dinamicos.md`; falta insertar el control desde
+  Studio (`Insertar → Medios → Visor de PDF`) y pegar la fórmula indicada.

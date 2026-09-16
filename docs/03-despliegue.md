@@ -49,7 +49,7 @@ Si el sitio ya existe, omite `-CreateSite` y `-Owner`.
 El script es idempotente: si algo falla a mitad, se vuelve a ejecutar y continúa
 donde estaba. Al terminar informa cuántos elementos creó y cuántos ya existían.
 
-**Verificación.** Abre el sitio y comprueba que existen las 10 listas y que
+**Verificación.** Abre el sitio y comprueba que existen las 13 listas y que
 `Contratos` tiene ~45 columnas. Si alguna columna aparece con `[!]` en la salida
 del script, revísala a mano antes de seguir.
 
@@ -202,7 +202,7 @@ Dos caminos, detallados en [`../canvas-app/README.md`](../canvas-app/README.md):
 
 Cualquiera de los dos requiere después:
 
-1. Conectar las 10 listas de SharePoint.
+1. Conectar las 13 listas de SharePoint.
 2. Agregar los conectores `Office365Users` y `Office365Outlook`.
 3. Agregar el flujo *Contratos - Solicitud de aprobación* y **verificar el
    nombre interno** que Power Apps le asigna; ajustar la llamada en `scrDetalle`

@@ -1,5 +1,7 @@
-# Ficha del contrato: cabecera, barra de acciones y seis pestañas.
+# Ficha del contrato: cabecera, barra de acciones y siete pestañas.
 # Fórmulas comentadas en canvas-app/formulas/02-detalle-y-edicion.md
+# La pestaña Campos (esquema dinámico por categoría) está en
+# canvas-app/formulas/05-categorias-campos-dinamicos.md
 Screens:
   scrDetalle:
     Properties:
@@ -7,11 +9,30 @@ Screens:
       OnVisible: |-
         =Set(gblContrato, LookUp(Contratos, ID = gblContrato.ID));
         UpdateContext({locPestana: "General", locEnviando: false, locConfirmarTerminar: false});
+        Set(gblDocumentoSeleccionado, Blank());
         Concurrent(
             ClearCollect(colDocumentos, Filter(DocumentosContratos, Contrato.Id = gblContrato.ID)),
             ClearCollect(colAprobaciones, Filter(Aprobaciones, Contrato.Id = gblContrato.ID)),
             ClearCollect(colMovimientos, Filter(MovimientosCustodia, Contrato.Id = gblContrato.ID)),
-            ClearCollect(colAdendas, Filter(Adendas, Contrato.Id = gblContrato.ID))
+            ClearCollect(colAdendas, Filter(Adendas, Contrato.Id = gblContrato.ID)),
+            // Todos los campos aplicables a la categoria del contrato, con su
+            // valor ya resuelto (en blanco si nunca se cargo). Solo lectura:
+            // el guardado ocurre en scrEditar.
+            ClearCollect(colCamposDinamicosD,
+                AddColumns(
+                    Filter(CamposPersonalizados, Activo = true,
+                        IsBlank(Categoria) || Categoria.Id = Coalesce(gblContrato.Categoria.Id, 0)),
+                    "ValorMostrado",
+                    With({_v: LookUp(ContratosCamposValor, Contrato.Id = gblContrato.ID, Campo.Id = ID)},
+                        Switch(TipoDato.Value,
+                            "Booleano", If(IsBlank(_v), "Sin responder", If(_v.ValorBooleano, "Sí", "No")),
+                            "Numero",   If(IsBlank(_v), "-", Text(_v.ValorNumero, "#,##0.00")),
+                            "Fecha",    If(IsBlank(_v) || IsBlank(_v.ValorFecha), "-", Text(_v.ValorFecha, "dd/mm/yyyy")),
+                            If(IsBlank(_v) || IsBlank(_v.ValorTexto), "-", _v.ValorTexto)
+                        )
+                    )
+                )
+            )
         );
         Set(gblMontoVigente,
             gblContrato.Monto + Sum(Filter(colAdendas, Estado.Value = "Aprobada"), MontoDelta))
@@ -59,7 +80,8 @@ Screens:
           Control: Label
           Properties:
             Text: |-
-              =gblContrato.Contraparte & " · " & gblContrato.TipoContrato.Value
+              =gblContrato.Contraparte & " · " & gblContrato.TipoContrato.Value &
+               If(IsBlank(gblContrato.Categoria), "", " · " & gblContrato.Categoria.Value)
             X: =60
             Y: =68
             Width: =Parent.Width - 400
@@ -245,7 +267,7 @@ Screens:
             TemplateSize: =150
             ShowScrollbar: =false
             Items: |-
-              =Table({Clave: "General"}, {Clave: "Económico"}, {Clave: "Documentos"},
+              =Table({Clave: "General"}, {Clave: "Económico"}, {Clave: "Campos"}, {Clave: "Documentos"},
                      {Clave: "Aprobaciones"}, {Clave: "Custodia"}, {Clave: "Adendas"})
           Children:
             - lblPestana:
@@ -274,8 +296,21 @@ Screens:
                   Fill: =gblTema.Primario
                   Visible: =locPestana = ThisItem.Clave
 
-      # --- Pestaña Documentos -------------------------------------------------
-      - galDocumentos:
+      # --- Pestaña Campos (esquema dinámico por categoría) --------------------
+      - lblSinCamposD:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(IsBlank(gblContrato.Categoria),
+                  "Este contrato no tiene categoría asignada. Edítalo para elegir una y ver sus campos adicionales.",
+                  "Esta categoría no tiene campos adicionales configurados.")
+            X: =24
+            Y: =236
+            Width: =Parent.Width - 48
+            Height: =32
+            Color: =gblTema.TextoSuave
+            Visible: =locPestana = "Campos" && CountRows(colCamposDinamicosD) = 0
+      - galCamposDinamicosD:
           Control: Gallery
           Variant: Vertical
           Properties:
@@ -283,9 +318,59 @@ Screens:
             Y: =236
             Width: =Parent.Width - 48
             Height: =Parent.Height - 268
+            TemplateSize: =40
+            Visible: =locPestana = "Campos"
+            Items: |-
+              =SortByColumns(SortByColumns(colCamposDinamicosD, "Orden", SortOrder.Ascending), "Seccion", SortOrder.Ascending)
+          Children:
+            - lblCDSeccion:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Seccion
+                  X: =12
+                  Y: =6
+                  Width: =260
+                  Height: =28
+                  Size: =gblTema.FuenteMenor
+                  Color: =gblTema.Info
+                  FontWeight: =FontWeight.Semibold
+            - lblCDEtiqueta:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Etiqueta
+                  X: =280
+                  Y: =6
+                  Width: =Parent.TemplateWidth * 0.4
+                  Height: =28
+                  Size: =gblTema.FuenteBase
+            - lblCDValor:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.ValorMostrado
+                  X: =Parent.TemplateWidth * 0.62
+                  Y: =6
+                  Width: =Parent.TemplateWidth * 0.36
+                  Height: =28
+                  Size: =gblTema.FuenteBase
+                  FontWeight: =FontWeight.Semibold
+                  Color: |-
+                    =Switch(ThisItem.ValorMostrado, "Sí", gblTema.Exito, "No", gblTema.Error,
+                        "Sin responder", gblTema.Advertencia, "-", gblTema.TextoSuave, gblTema.Texto)
+
+      # --- Pestaña Documentos -------------------------------------------------
+      - galDocumentos:
+          Control: Gallery
+          Variant: Vertical
+          Properties:
+            X: =24
+            Y: =236
+            Width: =(Parent.Width - 48) * 0.55
+            Height: =Parent.Height - 268
             TemplateSize: =64
             Visible: =locPestana = "Documentos"
             Items: =SortByColumns(colDocumentos, "FechaDocumento", SortOrder.Descending)
+            OnSelect: |-
+              =Set(gblDocumentoSeleccionado, ThisItem)
           Children:
             - lblDocNombre:
                 Control: Label
@@ -355,6 +440,59 @@ Screens:
                   BorderThickness: =1
                   BorderRadius: =gblTema.Radio
                   OnSelect: =Launch(ThisItem.'Vínculo al elemento')
+
+      # --- Vista previa del documento seleccionado ----------------------------
+      # El control nativo "PDF viewer" de Power Apps se agrega desde Studio
+      # (Insertar > Medios > Visor de PDF): no se declara aquí porque su
+      # identificador exacto de control no está verificado contra un entorno
+      # real (ver canvas-app/README.md). Se deja el marco y la propiedad
+      # Document ya resuelta; solo falta insertar el control sobre este
+      # espacio y pegar la fórmula. Detalle en
+      # canvas-app/formulas/05-categorias-campos-dinamicos.md
+      - recPanelPreview:
+          Control: Rectangle
+          Properties:
+            Fill: =gblTema.Tarjeta
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            X: =24 + (Parent.Width - 48) * 0.55 + 16
+            Y: =236
+            Width: =(Parent.Width - 48) * 0.45 - 16
+            Height: =Parent.Height - 268
+            Visible: =locPestana = "Documentos"
+      - lblPreviewNombre:
+          Control: Label
+          Properties:
+            Text: |-
+              =If(IsBlank(gblDocumentoSeleccionado), "Selecciona un documento para verlo aquí",
+                  gblDocumentoSeleccionado.'Nombre del archivo con extensión')
+            X: =24 + (Parent.Width - 48) * 0.55 + 32
+            Y: =248
+            Width: =(Parent.Width - 48) * 0.45 - 48
+            Height: =28
+            Size: =gblTema.FuenteBase
+            FontWeight: =FontWeight.Semibold
+            Visible: =locPestana = "Documentos"
+      - lblPreviewAviso:
+          Control: Label
+          Properties:
+            Text: |-
+              ="La vista previa en pantalla solo funciona para PDF. Para otros formatos (Word, Excel), usa 'Abrir'."
+            X: =24 + (Parent.Width - 48) * 0.55 + 32
+            Y: =280
+            Width: =(Parent.Width - 48) * 0.45 - 48
+            Height: =32
+            Size: =gblTema.FuenteMenor
+            Color: =gblTema.TextoSuave
+            Visible: |-
+              =locPestana = "Documentos" && !IsBlank(gblDocumentoSeleccionado)
+        # Aquí va el control "Visor de PDF" (Insert > Media > PDF viewer),
+        # posicionado dentro de este mismo marco (X/Y/Width/Height iguales a
+        # recPanelPreview con un margen de 16px), con:
+        #   Document: =If(EndsWith(Lower(gblDocumentoSeleccionado.'Nombre del archivo con extensión'), ".pdf"),
+        #                 gblDocumentoSeleccionado.'Vínculo al elemento', "")
+        #   Visible:  =locPestana = "Documentos" && !IsBlank(gblDocumentoSeleccionado)
 
       # --- Pestaña Aprobaciones ------------------------------------------------
       - galAprobacionesD:

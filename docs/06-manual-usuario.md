@@ -13,20 +13,51 @@
    - Área solicitante
    - Monto y moneda — o marca **Monto no determinado** si es a demanda
    - Fecha de inicio y de fin — o marca **Vigencia indefinida**
-3. **Guardar.** El código (`CTR-AAAA-NNNN`) se asigna solo en unos segundos.
+3. Elige una **categoría** (Logística, Comercial, RRHH, Legal...). Al elegirla
+   aparece, a la derecha, el formulario con los campos y cláusulas propios de
+   esa categoría — ver más abajo.
+4. **Guardar.** El código (`CTR-AAAA-NNNN`) se asigna solo en unos segundos.
    Si no aparece, refresca: lo genera un proceso en segundo plano.
 
-> **El monto determina quién aprueba.** Si lo pones mal, el contrato recorre la
-> ruta equivocada. Si no lo sabes con certeza, marca *Monto no determinado*: el
-> sistema lo trata como el tramo más alto y lo hace revisar por más gente.
+> **El monto determina quién aprueba, la categoría no.** Son dos cosas
+> distintas: el *tipo de contrato* (Servicios, Suministro...) y el monto
+> deciden la ruta de aprobación; la *categoría* solo organiza el archivo y
+> decide qué campos adicionales pedir. Cambiar la categoría de un contrato
+> nunca altera quién debe aprobarlo.
 
-### Subir el documento
+### Campos adicionales y cláusulas de la categoría
+
+Cada categoría trae su propio formulario adicional: por ejemplo, un contrato
+de **Logística** pide el número de orden de compra y el Incoterm pactado; uno
+de **Legal**, la jurisdicción aplicable. Es responsabilidad del administrador
+del sistema definir qué pide cada categoría — si crees que falta un campo,
+pídeselo a él en vez de improvisar la respuesta en el campo de notas.
+
+El checklist de **cláusulas corporativas** (protección de datos, antisoborno y
+anticorrupción, cláusula de salida, confidencialidad) aparece siempre, sin
+importar la categoría. Marca cada una con la casilla correspondiente; una
+cláusula sin marcar queda como «sin responder» en la ficha del contrato, no
+como «no aplica» — así se distingue lo que de verdad se revisó de lo que
+todavía nadie contestó.
+
+### Buscar y navegar por carpetas
+
+La bandeja de contratos tiene un panel de **carpetas** a la izquierda, una por
+categoría. Haz clic en una para ver solo los contratos de esa carpeta, o en
+**Todas las categorías** para quitar el filtro. Se puede combinar con los
+filtros de estado, tipo y la búsqueda de siempre.
+
+### Subir el documento y verlo en pantalla
 
 En la ficha del contrato, pestaña **Documentos**. Sube el PDF y **márcalo como
 principal**: es el que se enviará a firma.
 
 Solo puede haber un principal por contrato. Al marcar uno nuevo, el anterior deja
 de serlo.
+
+Al seleccionar un documento en la lista, se muestra una **vista previa en
+pantalla** al costado — funciona para PDF. Para Word o Excel, usa el botón
+**Abrir**, que lo descarga o lo abre en la aplicación correspondiente.
 
 ### Enviar a aprobación
 
@@ -179,14 +210,21 @@ X?» y «¿quién lo tuvo entre marzo y mayo?».
 | Aprobación pendiente | Al llegar tu nivel | Al aprobador |
 | Contrato aprobado | Al completar todos los niveles | Al solicitante |
 | Contrato rechazado | Al rechazarse | Al solicitante |
-| Preaviso de vencimiento | 90, 60, 30, 15, 7 y 1 días antes | Al responsable, copia al administrador |
-| Renovación automática | En los mismos hitos, si el contrato se renueva solo | Al responsable |
+| Preaviso de vencimiento | 90, 60, 30, 15, 7 y 1 días antes | Al responsable, copia al administrador **y** al responsable adicional de la categoría (p. ej. Compras, en contratos de Logística) |
+| Renovación automática | En los mismos hitos, si el contrato se renueva solo | Al responsable, misma copia que el preaviso |
 | Garantía por vencer | 30, 15, 7, 1 y 0 días antes | Al responsable |
 | Devolución pendiente | Día 1 de atraso y luego semanal | A quien tiene el original, copia al custodio |
 | Firma completada | Al firmar todas las partes | Al responsable |
 
 Cada alerta se envía **una sola vez** por hito. Si recibes la misma dos veces, hay
 algo mal: avisa al administrador.
+
+> **¿Quién es el «responsable adicional»?** Cada categoría puede tener una
+> persona configurada para recibir copia de sus alertas de vencimiento —
+> típicamente alguien de Compras en la carpeta Logística, o de Legal en la
+> carpeta Legal. Lo define el administrador en **Administración → Categorías**;
+> si un contrato no recibe esa copia, revisa que su categoría tenga asignado
+> un responsable adicional.
 
 > **El aviso de renovación automática es el que más cuesta caro ignorar.** En un
 > contrato que se renueva solo, el preaviso no es para renovar: es el plazo que

@@ -25,6 +25,10 @@ App:
 
       ClearCollect(colAreas, Filter(Areas, Activo = true));
 
+      // Categorias: carpetas administrables (Logistica, Comercial, RRHH...).
+      // Lista pequena y estable, igual que colAreas: se cachea una vez por sesion.
+      ClearCollect(colCategorias, Filter(Categorias, Activo = true));
+
       ClearCollect(colEstadosFiltro,
           {Valor: "(Todos)"}, {Valor: "Borrador"}, {Valor: "En revision legal"},
           {Valor: "En aprobacion"}, {Valor: "Aprobado"}, {Valor: "En firma"},
@@ -32,20 +36,27 @@ App:
           {Valor: "Renovado"}, {Valor: "Terminado"}, {Valor: "Rechazado"},
           {Valor: "Anulado"});
 
+      // Paleta corporativa AB Mauri (fuente: skill "tableros-abmauri",
+      // references/guia.md v1.0 — el mismo estándar de los tableros HTML de
+      // Financial Review, Costos, Compras, Nómina y Cuentas por Cobrar).
+      // Un solo cambio aquí actualiza toda la app: ninguna pantalla usa color
+      // literal, todas leen gblTema.
       Set(gblTema, {
-          Primario:        RGBA(11, 76, 140, 1),
-          PrimarioOscuro:  RGBA(8, 56, 104, 1),
-          PrimarioSuave:   RGBA(232, 240, 248, 1),
-          Fondo:           RGBA(245, 247, 250, 1),
+          Primario:        RGBA(104, 16, 41, 1),    // --burgundy #681029 — barra superior, cabeceras, títulos
+          PrimarioOscuro:  RGBA(78, 12, 31, 1),      // --deep     #4e0c1f — granate profundo (hover, énfasis)
+          PrimarioSuave:   RGBA(255, 244, 230, 1),   // --pale     #fff4e6 — fondos suaves sobre tarjetas
+          Acento:          RGBA(255, 153, 6, 1),     // --orange   #ff9906 — acentos y CTA secundario
+          Fondo:           RGBA(242, 237, 232, 1),   // --bg       #F2EDE8 — fondo de página
           Tarjeta:         RGBA(255, 255, 255, 1),
-          Borde:           RGBA(222, 226, 231, 1),
-          Texto:           RGBA(32, 38, 46, 1),
-          TextoSuave:      RGBA(105, 114, 126, 1),
+          Borde:           RGBA(230, 221, 213, 1),   // --line     #e6ddd5
+          Texto:           RGBA(44, 26, 14, 1),      // --navy     #2c1a0e — texto (pese al nombre, es tinta oscura)
+          TextoSuave:      RGBA(122, 106, 95, 1),    // gris cálido derivado de la familia --brown/--line
           TextoClaro:      RGBA(255, 255, 255, 1),
-          Exito:           RGBA(16, 124, 65, 1),
-          Advertencia:     RGBA(176, 112, 0, 1),
-          Error:           RGBA(168, 35, 35, 1),
-          Info:            RGBA(11, 76, 140, 1),
+          Exito:           RGBA(55, 86, 35, 1),      // --good     #375623
+          Advertencia:     RGBA(201, 138, 0, 1),     // --warn     #c98a00
+          Error:           RGBA(192, 0, 0, 1),       // --bad      #C00000
+          Info:            RGBA(168, 105, 43, 1),    // --gold     #A8692B
+          Fuente:          "'Segoe UI', Arial, sans-serif",
           Radio:           8,
           Espaciado:       16,
           FuenteTitulo:    20,

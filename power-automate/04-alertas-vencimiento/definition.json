@@ -3,8 +3,14 @@
   "contentVersion": "1.0.0.0",
   "description": "Ejecucion diaria. Recorre los contratos vigentes y avisa en los hitos de preaviso configurados, marca los vencidos y controla el vencimiento de las garantias. La lista Alertas evita que la misma notificacion se envie dos veces.",
   "parameters": {
-    "$connections": { "defaultValue": {}, "type": "Object" },
-    "$authentication": { "defaultValue": {}, "type": "SecureObject" }
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    }
   },
   "triggers": {
     "Cada_dia_a_las_8": {
@@ -13,7 +19,14 @@
         "frequency": "Day",
         "interval": 1,
         "timeZone": "SA Pacific Standard Time",
-        "schedule": { "hours": ["8"], "minutes": [0] }
+        "schedule": {
+          "hours": [
+            "8"
+          ],
+          "minutes": [
+            0
+          ]
+        }
       }
     }
   },
@@ -21,7 +34,11 @@
     "Obtener_hitos": {
       "type": "OpenApiConnection",
       "inputs": {
-        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetItems",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
         "parameters": {
           "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
           "table": "Parametros",
@@ -33,15 +50,27 @@
     },
     "Hitos": {
       "type": "Compose",
-      "runAfter": { "Obtener_hitos": ["Succeeded"] },
+      "runAfter": {
+        "Obtener_hitos": [
+          "Succeeded"
+        ]
+      },
       "description": "Dias de anticipacion en los que se notifica. Si el parametro no existe, se usan los valores por defecto.",
       "inputs": "@if(empty(body('Obtener_hitos')?['value']), createArray('90','60','30','15','7','1'), split(first(body('Obtener_hitos')?['value'])?['Valor'], ','))"
     },
     "Obtener_correo_admin": {
       "type": "OpenApiConnection",
-      "runAfter": { "Hitos": ["Succeeded"] },
+      "runAfter": {
+        "Hitos": [
+          "Succeeded"
+        ]
+      },
       "inputs": {
-        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetItems",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
         "parameters": {
           "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
           "table": "Parametros",
@@ -53,16 +82,27 @@
     },
     "Correo_admin": {
       "type": "Compose",
-      "runAfter": { "Obtener_correo_admin": ["Succeeded"] },
+      "runAfter": {
+        "Obtener_correo_admin": [
+          "Succeeded"
+        ]
+      },
       "inputs": "@if(empty(body('Obtener_correo_admin')?['value']), '', first(body('Obtener_correo_admin')?['value'])?['Valor'])"
     },
-
     "Obtener_contratos_vigentes": {
       "type": "OpenApiConnection",
-      "runAfter": { "Correo_admin": ["Succeeded"] },
+      "runAfter": {
+        "Correo_admin": [
+          "Succeeded"
+        ]
+      },
       "description": "Solo contratos con fecha de fin real. Los de vigencia indefinida quedan fuera.",
       "inputs": {
-        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetItems",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
         "parameters": {
           "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
           "table": "Contratos",
@@ -73,12 +113,19 @@
         "authentication": "@parameters('$authentication')"
       }
     },
-
     "Revisar_cada_contrato": {
       "type": "Foreach",
-      "runAfter": { "Obtener_contratos_vigentes": ["Succeeded"] },
+      "runAfter": {
+        "Obtener_contratos_vigentes": [
+          "Succeeded"
+        ]
+      },
       "foreach": "@body('Obtener_contratos_vigentes')?['value']",
-      "runtimeConfiguration": { "concurrency": { "repetitions": 4 } },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 4
+        }
+      },
       "actions": {
         "Dias_restantes": {
           "type": "Compose",
@@ -87,14 +134,27 @@
         },
         "Debe_alertar": {
           "type": "Compose",
-          "runAfter": { "Dias_restantes": ["Succeeded"] },
+          "runAfter": {
+            "Dias_restantes": [
+              "Succeeded"
+            ]
+          },
           "description": "Se notifica si ya vencio o si hoy coincide exactamente con un hito de preaviso.",
           "inputs": "@or(less(outputs('Dias_restantes'), 0), contains(outputs('Hitos'), string(outputs('Dias_restantes'))))"
         },
         "Si_corresponde_alertar": {
           "type": "If",
-          "runAfter": { "Debe_alertar": ["Succeeded"] },
-          "expression": { "equals": [ "@outputs('Debe_alertar')", true ] },
+          "runAfter": {
+            "Debe_alertar": [
+              "Succeeded"
+            ]
+          },
+          "expression": {
+            "equals": [
+              "@outputs('Debe_alertar')",
+              true
+            ]
+          },
           "actions": {
             "Tipo_de_alerta": {
               "type": "Compose",
@@ -103,15 +163,27 @@
             },
             "Dias_a_registrar": {
               "type": "Compose",
-              "runAfter": { "Tipo_de_alerta": ["Succeeded"] },
+              "runAfter": {
+                "Tipo_de_alerta": [
+                  "Succeeded"
+                ]
+              },
               "inputs": "@if(less(outputs('Dias_restantes'), 0), 0, outputs('Dias_restantes'))"
             },
             "Buscar_alerta_previa": {
               "type": "OpenApiConnection",
-              "runAfter": { "Dias_a_registrar": ["Succeeded"] },
+              "runAfter": {
+                "Dias_a_registrar": [
+                  "Succeeded"
+                ]
+              },
               "description": "Antiduplicado: misma combinacion de contrato, tipo de alerta y dias de anticipacion.",
               "inputs": {
-                "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
                 "parameters": {
                   "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
                   "table": "Alertas",
@@ -123,13 +195,26 @@
             },
             "Si_no_se_notifico_antes": {
               "type": "If",
-              "runAfter": { "Buscar_alerta_previa": ["Succeeded"] },
-              "expression": { "equals": [ "@empty(body('Buscar_alerta_previa')?['value'])", true ] },
+              "runAfter": {
+                "Buscar_alerta_previa": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "equals": [
+                  "@empty(body('Buscar_alerta_previa')?['value'])",
+                  true
+                ]
+              },
               "actions": {
                 "Actualizar_estado_del_contrato": {
                   "type": "OpenApiConnection",
                   "inputs": {
-                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PatchItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
                     "parameters": {
                       "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
                       "table": "Contratos",
@@ -141,18 +226,30 @@
                 },
                 "Destinatarios": {
                   "type": "Compose",
-                  "runAfter": { "Actualizar_estado_del_contrato": ["Succeeded"] },
+                  "runAfter": {
+                    "Correo_responsable_adicional": [
+                      "Succeeded"
+                    ]
+                  },
                   "description": "Responsable del contrato y, en su defecto, el solicitante. El administrador siempre va en copia.",
                   "inputs": "@coalesce(items('Revisar_cada_contrato')?['ResponsableContrato']?['Email'], items('Revisar_cada_contrato')?['Solicitante']?['Email'], outputs('Correo_admin'))"
                 },
                 "Enviar_alerta": {
                   "type": "OpenApiConnection",
-                  "runAfter": { "Destinatarios": ["Succeeded"] },
+                  "runAfter": {
+                    "Destinatarios": [
+                      "Succeeded"
+                    ]
+                  },
                   "inputs": {
-                    "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
                     "parameters": {
                       "emailMessage/To": "@outputs('Destinatarios')",
-                      "emailMessage/Cc": "@outputs('Correo_admin')",
+                      "emailMessage/Cc": "@concat(outputs('Correo_admin'), if(empty(outputs('Correo_responsable_adicional')), '', concat(';', outputs('Correo_responsable_adicional'))))",
                       "emailMessage/Subject": "@concat('[Contratos] ', outputs('Tipo_de_alerta'), ': ', coalesce(items('Revisar_cada_contrato')?['Title'], ''), ' - ', items('Revisar_cada_contrato')?['NombreContrato'])",
                       "emailMessage/Body": "<p>@{if(less(outputs('Dias_restantes'), 0), concat('El contrato vencio hace ', string(mul(outputs('Dias_restantes'), -1)), ' dia(s).'), concat('El contrato vence en ', string(outputs('Dias_restantes')), ' dia(s).'))}</p><table cellpadding=\"6\" style=\"border-collapse:collapse\"><tr><td><b>Codigo</b></td><td>@{coalesce(items('Revisar_cada_contrato')?['Title'], '')}</td></tr><tr><td><b>Contrato</b></td><td>@{items('Revisar_cada_contrato')?['NombreContrato']}</td></tr><tr><td><b>Contraparte</b></td><td>@{items('Revisar_cada_contrato')?['Contraparte']}</td></tr><tr><td><b>Tipo</b></td><td>@{items('Revisar_cada_contrato')?['TipoContrato']?['Value']}</td></tr><tr><td><b>Vence</b></td><td>@{formatDateTime(items('Revisar_cada_contrato')?['FechaFin'], 'dd/MM/yyyy')}</td></tr><tr><td><b>Renovacion automatica</b></td><td>@{if(equals(items('Revisar_cada_contrato')?['RenovacionAutomatica'], true), 'SI - si no deseas renovar, debes comunicarlo antes del vencimiento', 'No')}</td></tr></table><p><a href=\"@{concat('https://CONTOSO.sharepoint.com/sites/Contratos/Lists/Contratos/DispForm.aspx?ID=', string(items('Revisar_cada_contrato')?['ID']))}\">Abrir el contrato</a></p>",
                       "emailMessage/Importance": "@if(lessOrEquals(outputs('Dias_restantes'), 7), 'High', 'Normal')"
@@ -162,9 +259,17 @@
                 },
                 "Registrar_alerta": {
                   "type": "OpenApiConnection",
-                  "runAfter": { "Enviar_alerta": ["Succeeded"] },
+                  "runAfter": {
+                    "Enviar_alerta": [
+                      "Succeeded"
+                    ]
+                  },
                   "inputs": {
-                    "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PostItem",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
                     "parameters": {
                       "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
                       "table": "Alertas",
@@ -178,22 +283,66 @@
                     },
                     "authentication": "@parameters('$authentication')"
                   }
+                },
+                "Obtener_categoria_del_contrato": {
+                  "type": "OpenApiConnection",
+                  "runAfter": {
+                    "Actualizar_estado_del_contrato": [
+                      "Succeeded"
+                    ]
+                  },
+                  "description": "GetItems (no GetItem) para no fallar cuando el contrato no tiene categoria asignada.",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "GetItems",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
+                      "table": "Categorias",
+                      "$filter": "ID eq @{if(empty(items('Revisar_cada_contrato')?['Categoria']), 0, items('Revisar_cada_contrato')?['Categoria']?['Id'])}",
+                      "$top": 1
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                },
+                "Correo_responsable_adicional": {
+                  "type": "Compose",
+                  "runAfter": {
+                    "Obtener_categoria_del_contrato": [
+                      "Succeeded"
+                    ]
+                  },
+                  "description": "Correo del Responsable adicional de la categoria (p. ej. Compras en Logistica). Vacio si el contrato no tiene categoria o la categoria no define uno.",
+                  "inputs": "@if(empty(body('Obtener_categoria_del_contrato')?['value']), '', coalesce(first(body('Obtener_categoria_del_contrato')?['value'])?['ResponsableAdicional']?['Email'], ''))"
                 }
               },
-              "else": { "actions": {} }
+              "else": {
+                "actions": {}
+              }
             }
           },
-          "else": { "actions": {} }
+          "else": {
+            "actions": {}
+          }
         }
       }
     },
-
     "Obtener_garantias_por_vencer": {
       "type": "OpenApiConnection",
-      "runAfter": { "Revisar_cada_contrato": ["Succeeded"] },
+      "runAfter": {
+        "Revisar_cada_contrato": [
+          "Succeeded"
+        ]
+      },
       "description": "Cartas fianza y demas garantias que vencen dentro de los proximos 30 dias.",
       "inputs": {
-        "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "GetItems",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
         "parameters": {
           "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
           "table": "Contratos",
@@ -206,9 +355,17 @@
     },
     "Revisar_cada_garantia": {
       "type": "Foreach",
-      "runAfter": { "Obtener_garantias_por_vencer": ["Succeeded"] },
+      "runAfter": {
+        "Obtener_garantias_por_vencer": [
+          "Succeeded"
+        ]
+      },
       "foreach": "@body('Obtener_garantias_por_vencer')?['value']",
-      "runtimeConfiguration": { "concurrency": { "repetitions": 4 } },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 4
+        }
+      },
       "actions": {
         "Dias_hasta_el_vencimiento_de_la_garantia": {
           "type": "Compose",
@@ -216,9 +373,17 @@
         },
         "Buscar_alerta_de_garantia_previa": {
           "type": "OpenApiConnection",
-          "runAfter": { "Dias_hasta_el_vencimiento_de_la_garantia": ["Succeeded"] },
+          "runAfter": {
+            "Dias_hasta_el_vencimiento_de_la_garantia": [
+              "Succeeded"
+            ]
+          },
           "inputs": {
-            "host": { "connectionName": "shared_sharepointonline", "operationId": "GetItems", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
             "parameters": {
               "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
               "table": "Alertas",
@@ -230,18 +395,36 @@
         },
         "Si_la_garantia_no_se_notifico": {
           "type": "If",
-          "runAfter": { "Buscar_alerta_de_garantia_previa": ["Succeeded"] },
+          "runAfter": {
+            "Buscar_alerta_de_garantia_previa": [
+              "Succeeded"
+            ]
+          },
           "expression": {
             "and": [
-              { "equals": [ "@empty(body('Buscar_alerta_de_garantia_previa')?['value'])", true ] },
-              { "equals": [ "@contains(createArray(30, 15, 7, 1, 0), outputs('Dias_hasta_el_vencimiento_de_la_garantia'))", true ] }
+              {
+                "equals": [
+                  "@empty(body('Buscar_alerta_de_garantia_previa')?['value'])",
+                  true
+                ]
+              },
+              {
+                "equals": [
+                  "@contains(createArray(30, 15, 7, 1, 0), outputs('Dias_hasta_el_vencimiento_de_la_garantia'))",
+                  true
+                ]
+              }
             ]
           },
           "actions": {
             "Avisar_garantia": {
               "type": "OpenApiConnection",
               "inputs": {
-                "host": { "connectionName": "shared_office365", "operationId": "SendEmailV2", "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365" },
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
                 "parameters": {
                   "emailMessage/To": "@coalesce(items('Revisar_cada_garantia')?['ResponsableContrato']?['Email'], outputs('Correo_admin'))",
                   "emailMessage/Cc": "@outputs('Correo_admin')",
@@ -254,9 +437,17 @@
             },
             "Registrar_alerta_de_garantia": {
               "type": "OpenApiConnection",
-              "runAfter": { "Avisar_garantia": ["Succeeded"] },
+              "runAfter": {
+                "Avisar_garantia": [
+                  "Succeeded"
+                ]
+              },
               "inputs": {
-                "host": { "connectionName": "shared_sharepointonline", "operationId": "PostItem", "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline" },
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PostItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
                 "parameters": {
                   "dataset": "https://CONTOSO.sharepoint.com/sites/Contratos",
                   "table": "Alertas",
@@ -272,7 +463,9 @@
               }
             }
           },
-          "else": { "actions": {} }
+          "else": {
+            "actions": {}
+          }
         }
       }
     }

@@ -5,7 +5,7 @@
 | Capa | Tecnología | Papel |
 |---|---|---|
 | Interfaz | Power Apps — aplicación de lienzo | Registro, consulta, custodia y administración |
-| Datos | SharePoint Online (9 listas + 1 biblioteca) | Maestro de contratos y custodia documental versionada |
+| Datos | SharePoint Online (13 listas + 1 biblioteca) | Maestro de contratos, custodia documental y esquema configurable por categoría |
 | Proceso | Power Automate (6 flujos) | Numeración, aprobación, firma, alertas, control de préstamos |
 | Aprobación | Approvals (Power Automate) | Tarjetas de decisión en Teams y Outlook |
 | Firma | DocuSign | Firma electrónica y devolución del sobre firmado |

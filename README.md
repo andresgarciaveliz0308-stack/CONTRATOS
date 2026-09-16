@@ -15,10 +15,12 @@ fuente de la app de Power Apps y la documentación funcional y técnica.
 | Necesidad | Cómo se cubre |
 |---|---|
 | **Administración** | Maestro único de contratos con ficha completa: contraparte, económicos, vigencia, obligaciones, garantías, renovación automática. |
-| **Custodia documental** | Biblioteca versionada para el digital + trazabilidad del **original físico** (ubicación, custodio, préstamos y devoluciones). |
-| **Workflow de aprobaciones** | Matriz de aprobación **configurable por tipo de contrato y monto**, multinivel y secuencial, con historial completo e inmutable. |
+| **Organización por carpetas** | Categorías administrables (Logística, Comercial, RRHH, Legal...) con búsqueda por código, nombre o contraparte. |
+| **Esquema configurable por categoría** | Campos adicionales y checklist de cláusulas corporativas (protección de datos, antisoborno, salida) que el administrador define por carpeta, sin tocar SharePoint. |
+| **Custodia documental** | Biblioteca versionada para el digital, con vista previa de PDF en pantalla, + trazabilidad del **original físico** (ubicación, custodio, préstamos y devoluciones). |
+| **Workflow de aprobaciones** | Matriz de aprobación **configurable por tipo de contrato y monto**, multinivel y secuencial, con historial completo e inmutable, vía tarjetas de Teams/Outlook. |
 | **Firma electrónica** | Envío automático a DocuSign al aprobarse; el sobre firmado regresa solo al expediente. |
-| **Control de vencimientos** | Alertas por correo y Teams con N días de preaviso, incluyendo renovaciones automáticas y cartas fianza. |
+| **Control de vencimientos** | Alertas por correo con N días de preaviso al responsable, al administrador **y** al responsable adicional de la categoría (p. ej. Compras), incluyendo renovaciones automáticas y cartas fianza. |
 
 ---
 
@@ -32,7 +34,7 @@ fuente de la app de Power Apps y la documentación funcional y técnica.
                 │
 ┌───────────────▼──────────────────────────────────────────────┐
 │  SharePoint Online — sitio "Contratos"                        │
-│  9 listas de negocio + 1 biblioteca documental versionada     │
+│  13 listas de negocio + 1 biblioteca documental versionada    │
 └───────────────┬──────────────────────────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────────────────────────┐
@@ -124,7 +126,7 @@ paso y con capturas de los puntos críticos, está en
 | Documento | Contenido |
 |---|---|
 | [01 — Arquitectura](docs/01-arquitectura.md) | Componentes, licenciamiento, límites y decisiones de diseño |
-| [02 — Modelo de datos](docs/02-modelo-datos.md) | Las 10 listas, cada columna, tipos, opciones y relaciones |
+| [02 — Modelo de datos](docs/02-modelo-datos.md) | Las 13 listas, cada columna, tipos, opciones y relaciones |
 | [03 — Despliegue](docs/03-despliegue.md) | Instalación paso a paso de extremo a extremo |
 | [04 — Workflow de aprobaciones](docs/04-flujos-aprobacion.md) | Matriz configurable, niveles, SLA, delegación y reproceso |
 | [05 — Seguridad y permisos](docs/05-seguridad-permisos.md) | Grupos, roles, confidencialidad y permisos a nivel de elemento |
