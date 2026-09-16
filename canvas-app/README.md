@@ -77,6 +77,16 @@ pantalla queda inalcanzable.
 Es más trabajo la primera vez, pero no depende de la versión del CLI y deja la
 app en el estado que Studio espera.
 
+> **Usa Power Apps Studio en la web** (`make.powerapps.com`), no la app de
+> escritorio para Windows. Microsoft dejó de desarrollarla y la viene
+> retirando: las funciones nuevas y los conectores actualizados llegan primero
+> —y a veces solo— a la versión web. La app de escritorio no ofrece ninguna
+> ventaja real aquí, ni siquiera edición sin conexión: igual necesita acceder
+> a las listas de SharePoint en vivo.
+>
+> No confundir con la **app móvil de Power Apps** (Android/iOS): esa sirve
+> para *ejecutar* apps ya publicadas, no para construirlas en Studio.
+
 1. **Crear la app**: Power Apps → *Crear* → *Aplicación en blanco* → formato
    *Tableta*. Nómbrala `Contratos`.
 
