@@ -72,8 +72,28 @@ canvas-app/          Código fuente de la app
   formulas/                 Fórmulas por pantalla, listas para copiar/pegar
   README.md                 Cómo empaquetar o reconstruir la app
 
+tools/               Validadores (Python 3, sin dependencias salvo PyYAML)
+  validate-flows.py         Consistencia interna de los definition.json
+  validate-canvas-yaml.py   Estructura y fórmulas del código fuente de la app
+  check-consistency.py      Nombres de listas y columnas entre las tres capas
+  fix-canvas-yaml.py        Corrige las propiedades que YAML no lee como escalar plano
+
 docs/                Documentación funcional y técnica (español)
 ```
+
+### Validar antes de desplegar
+
+```bash
+python3 tools/check-consistency.py      # ¿existe cada lista y columna referenciada?
+python3 tools/validate-flows.py         # ¿los flujos son coherentes?
+python3 tools/validate-canvas-yaml.py   # ¿la app está bien formada?
+```
+
+`check-consistency.py` es el que más trabajo ahorra: extrae el esquema real del
+script de aprovisionamiento y comprueba que **cada lista y cada columna** que
+usan los flujos y las fórmulas existe de verdad. SharePoint no falla al leer una
+columna inexistente — devuelve vacío — así que una errata de este tipo no se
+descubre hasta que un contrato real se detiene en producción.
 
 ---
 
@@ -111,3 +131,29 @@ paso y con capturas de los puntos críticos, está en
 | [06 — Manual de usuario](docs/06-manual-usuario.md) | Guía para solicitantes, aprobadores y custodios |
 | [07 — Integración DocuSign](docs/07-docusign.md) | Cuenta, conector, plantillas y mapeo de firmantes |
 | [08 — Operación y soporte](docs/08-operacion.md) | Monitoreo, errores comunes, respaldo y retención |
+| [Flujos](power-automate/README.md) | Cada flujo acción por acción, para construirlo en el diseñador |
+| [Aplicación](canvas-app/README.md) | Cómo empaquetar o reconstruir la app, y qué queda pendiente |
+
+---
+
+## Estado de lo entregado
+
+| Componente | Verificación |
+|---|---|
+| Scripts de SharePoint | Sintaxis validada con el parser de PowerShell 7.4 |
+| Definiciones de flujos | 0 errores en `validate-flows.py`; probado con defectos inyectados |
+| Empaquetador de flujos | Ejecutado de extremo a extremo; salida verificada |
+| Código fuente de la app | 0 errores y 0 avisos en `validate-canvas-yaml.py` |
+| Coherencia entre capas | 0 discrepancias en `check-consistency.py` |
+
+**Nada de esto se ha ejecutado contra un tenant real de Microsoft 365**, porque
+no había uno disponible. Dos puntos concretos que hay que verificar al desplegar,
+ambos señalados en su documentación:
+
+- Los `operationId` del **conector de DocuSign** cambian entre versiones
+  ([`docs/07-docusign.md`](docs/07-docusign.md)). El resto de los flujos 02 y 03
+  no depende de ello.
+- El formato **YAML del código fuente de las apps de lienzo** sigue evolucionando
+  y `pac canvas pack` es sensible a la versión del CLI
+  ([`canvas-app/README.md`](canvas-app/README.md)). Hay un camino alternativo
+  documentado.

@@ -17,8 +17,9 @@
     El formato del paquete heredado no es un contrato publico documentado por
     Microsoft y cambia entre versiones del servicio. Si la importacion es
     rechazada, usa el archivo de ./build/ como referencia y construye el flujo
-    en el disenador siguiendo el README.md de cada carpeta: ahi estan todas las
-    acciones y expresiones, en orden. Los flujos generados por este script no se
+    en el disenador siguiendo power-automate/README.md: ahi esta cada flujo
+    descrito accion por accion, con las expresiones y las tres trampas de
+    configuracion que no se ven en el JSON. Los flujos generados por este script no se
     han validado contra un tenant real.
 
 .PARAMETER SiteUrl
@@ -145,7 +146,7 @@ foreach ($carpeta in $carpetas) {
 if ($Empaquetar) {
     Write-Paso "Generando los paquetes de importacion"
     Write-Aviso "Formato heredado no documentado: si la importacion falla, construye"
-    Write-Aviso "el flujo en el disenador siguiendo el README.md de su carpeta."
+    Write-Aviso "el flujo en el disenador siguiendo power-automate/README.md"
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
 
@@ -264,7 +265,7 @@ Write-Host @"
      importacion (heredado) > seleccionar el .zip > asignar
      las conexiones > Importar.
 
-   Si la importacion falla, construyelo en el disenador con
-   el README.md de la carpeta del flujo.
+   Si la importacion falla, construyelo en el disenador
+   siguiendo power-automate/README.md
   ============================================================
 "@ -ForegroundColor White
