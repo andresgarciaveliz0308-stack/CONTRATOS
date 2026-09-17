@@ -101,6 +101,13 @@ descubre hasta que un contrato real se detiene en producción.
 
 ## Despliegue rápido
 
+**¿Primera vez? Empieza por [`docs/00-inicio-rapido.md`](docs/00-inicio-rapido.md)** —
+10 pasos con comandos listos para copiar y pegar, pensados para ver un
+contrato real recorriendo el circuito de aprobación en unas 2 horas, incluso
+sin tenant corporativo todavía (usando el Microsoft 365 Developer Program,
+gratis). Lo que sigue aquí es el resumen; la guía completa, con todos los
+matices, está en [`docs/03-despliegue.md`](docs/03-despliegue.md).
+
 Requisitos: PowerShell 7+, `PnP.PowerShell`, permisos de administrador del sitio y
 licencia de Power Automate con conector premium (DocuSign).
 
@@ -125,6 +132,7 @@ paso y con capturas de los puntos críticos, está en
 
 | Documento | Contenido |
 |---|---|
+| [00 — Inicio rápido](docs/00-inicio-rapido.md) | **10 pasos, copiar y pegar.** La forma más corta de ver la app funcionando |
 | [01 — Arquitectura](docs/01-arquitectura.md) | Componentes, licenciamiento, límites y decisiones de diseño |
 | [02 — Modelo de datos](docs/02-modelo-datos.md) | Las 13 listas, cada columna, tipos, opciones y relaciones |
 | [03 — Despliegue](docs/03-despliegue.md) | Instalación paso a paso de extremo a extremo |
