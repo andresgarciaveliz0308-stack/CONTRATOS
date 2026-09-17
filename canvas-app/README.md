@@ -171,12 +171,6 @@ para arrancar.
   es columna de persona). En `formulas/01-inicio-y-bandeja.md` está explicado el
   arreglo limpio: una columna de texto `ResponsableEmail` indexada, mantenida por
   el flujo.
-- **`frmRegla`** (alta y edición de reglas de la matriz de aprobación) está
-  especificado en `formulas/04-administracion.md` pero **no** implementado en
-  el YAML — hoy esa sección de `scrAdmin` solo activa/desactiva reglas
-  existentes. Se detectó al construir el CRUD de categorías (`frmCategoria` /
-  `frmCampo`, en `formulas/05-categorias-campos-dinamicos.md`), que sigue
-  exactamente el mismo patrón y se puede usar de referencia para completarlo.
 - El control nativo **Visor de PDF** (vista previa de documentos en
   `scrDetalle`) no se declara en el YAML: su identificador de control no está
   verificado contra un entorno real. El marco y la fórmula ya están listos en

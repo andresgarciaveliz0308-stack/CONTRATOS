@@ -1,8 +1,10 @@
 # scrAdmin — administración
 
-Solo visible para `gblEsAdmin`. Tres secciones: **matriz de aprobación**,
-**parámetros** y **áreas**. Es la pantalla que permite cambiar cómo se aprueba
-sin tocar Power Automate.
+Solo visible para `gblEsAdmin`. Cuatro secciones: **matriz de aprobación**,
+**parámetros**, **áreas** y **categorías** (esta última documentada en
+`05-categorias-campos-dinamicos.md`). Es la pantalla que permite cambiar cómo
+se aprueba y cómo se organiza el archivo, sin tocar Power Automate ni
+SharePoint.
 
 ## scrAdmin.OnVisible
 
@@ -26,7 +28,7 @@ Concurrent(
     ClearCollect(colAreasAdmin, Areas)
 );
 
-UpdateContext({ locSeccion: "Matriz", locRegla: Blank() })
+UpdateContext({ locSeccion: "Matriz" })
 ```
 
 ---
@@ -180,24 +182,31 @@ If(
 
 ### Alta y edición de reglas
 
-`frmRegla.DataSource`: `MatrizAprobacion` · `frmRegla.Item`: `locRegla`
+`frmRegla.DataSource`: `MatrizAprobacion` · `frmRegla.Item`: `gblReglaEnEdicion`.
+Se usa una variable **global** (`Set`), no de pantalla, siguiendo la misma
+convención que `gblCategoriaEnEdicion` / `gblCampoEnEdicion` de la sección
+Categorías (`05-categorias-campos-dinamicos.md`): todos los formularios de
+alta/edición de `scrAdmin` guardan su registro en edición del mismo modo.
+
+Mientras el panel está abierto (`locPanelRegla = true`), **reemplaza** a
+`galMatriz` en el mismo espacio de la pantalla — no aparecen los dos a la vez.
 
 ```powerfx
 // btnNuevaRegla.OnSelect
-UpdateContext({ locRegla: Blank() });
+Set(gblReglaEnEdicion, Blank());
 NewForm(frmRegla);
-UpdateContext({ locPanelRegla: true })
+UpdateContext({ locPanelRegla: true, locErrorRegla: "" })
 
-// galMatriz elemento .OnSelect
-UpdateContext({ locRegla: ThisItem });
+// btnMatEditar.OnSelect (uno por fila de galMatriz)
+Set(gblReglaEnEdicion, ThisItem);
 EditForm(frmRegla);
-UpdateContext({ locPanelRegla: true })
+UpdateContext({ locPanelRegla: true, locErrorRegla: "" })
 ```
 
 Validación antes de guardar:
 
 ```powerfx
-// btnGuardarRegla.OnSelect
+// btnReglaGuardar.OnSelect
 With(
     {
         _desde: Value(DataCardValue_MontoDesde.Text),

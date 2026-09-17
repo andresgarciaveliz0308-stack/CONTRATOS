@@ -274,16 +274,32 @@ Screens:
                   Color: =gblTema.TextoSuave
 
       # --- Matriz --------------------------------------------------------------
+      - btnNuevaRegla:
+          Control: Button
+          Properties:
+            Text: ="+ Nueva regla"
+            X: =24
+            Y: =502
+            Width: =160
+            Height: =32
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Matriz" && !locPanelRegla
+            OnSelect: |-
+              =Set(gblReglaEnEdicion, Blank());
+              NewForm(frmRegla);
+              UpdateContext({locPanelRegla: true, locErrorRegla: ""})
       - galMatriz:
           Control: Gallery
           Variant: Vertical
           Properties:
             X: =24
-            Y: =502
+            Y: =542
             Width: =Parent.Width - 48
-            Height: =Parent.Height - 534
+            Height: =Parent.Height - 574
             TemplateSize: =64
-            Visible: =locSeccion = "Matriz"
+            Visible: =locSeccion = "Matriz" && !locPanelRegla
             Items: =colMatriz
           Children:
             - lblMatRegla:
@@ -337,13 +353,111 @@ Screens:
                 Control: Classic/Toggle
                 Properties:
                   Default: =ThisItem.Activo
-                  X: =Parent.TemplateWidth - 90
+                  X: =Parent.TemplateWidth - 172
                   Y: =20
                   Width: =70
                   Height: =24
                   OnChange: |-
                     =Patch(MatrizAprobacion, LookUp(MatrizAprobacion, ID = ThisItem.ID),
                            {Activo: tglActivo.Value})
+            - btnMatEditar:
+                Control: Button
+                Properties:
+                  Text: ="Editar"
+                  X: =Parent.TemplateWidth - 90
+                  Y: =16
+                  Width: =78
+                  Height: =32
+                  Fill: =gblTema.Tarjeta
+                  Color: =gblTema.Primario
+                  BorderColor: =gblTema.Borde
+                  BorderThickness: =1
+                  BorderRadius: =gblTema.Radio
+                  OnSelect: |-
+                    =Set(gblReglaEnEdicion, ThisItem);
+                    EditForm(frmRegla);
+                    UpdateContext({locPanelRegla: true, locErrorRegla: ""})
+
+      # --- Alta y edición de reglas (panel, reemplaza a galMatriz mientras está abierto) ---
+      - frmRegla:
+          Control: Form
+          Properties:
+            DataSource: =MatrizAprobacion
+            Item: =gblReglaEnEdicion
+            X: =24
+            Y: =542
+            Width: =Parent.Width - 48
+            Height: =Parent.Height - 670
+            Columns: =2
+            Visible: =locSeccion = "Matriz" && locPanelRegla
+            OnSuccess: |-
+              =ClearCollect(colMatriz,
+                  SortByColumns(SortByColumns(MatrizAprobacion, "Nivel", SortOrder.Ascending),
+                                "MontoDesdePEN", SortOrder.Ascending));
+              UpdateContext({locPanelRegla: false});
+              Notify("Regla guardada. Aplica a los contratos que se envíen a aprobación desde ahora.",
+                     NotificationType.Success, 5000)
+            OnFailure: |-
+              =Notify("No se pudo guardar: " & frmRegla.Error, NotificationType.Error, 6000)
+      - lblErrorRegla:
+          Control: Label
+          Properties:
+            Text: =locErrorRegla
+            X: =24
+            Y: =Parent.Height - 108
+            Width: =Parent.Width - 48
+            Height: =28
+            Color: =gblTema.Error
+            Size: =gblTema.FuenteMenor
+            Visible: =locSeccion = "Matriz" && locPanelRegla && !IsBlank(locErrorRegla)
+      - btnReglaCancelar:
+          Control: Button
+          Properties:
+            Text: ="Cancelar"
+            X: =24
+            Y: =Parent.Height - 76
+            Width: =120
+            Height: =32
+            Fill: =gblTema.Tarjeta
+            Color: =gblTema.TextoSuave
+            BorderColor: =gblTema.Borde
+            BorderThickness: =1
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Matriz" && locPanelRegla
+            OnSelect: |-
+              =ResetForm(frmRegla);
+              UpdateContext({locPanelRegla: false})
+      - btnReglaGuardar:
+          Control: Button
+          Properties:
+            Text: ="Guardar"
+            X: =156
+            Y: =Parent.Height - 76
+            Width: =120
+            Height: =32
+            Fill: =gblTema.Primario
+            Color: =gblTema.TextoClaro
+            BorderRadius: =gblTema.Radio
+            Visible: =locSeccion = "Matriz" && locPanelRegla
+            # Validaciones que SharePoint no puede expresar por si solo: el
+            # tramo debe ser coherente y un rol que no se resuelve solo (no es
+            # Jefe/Gerente de area) necesita un aprobador asignado.
+            OnSelect: |-
+              =With({
+                  _desde: Value(DataCardValue_MontoDesde.Text),
+                  _hasta: Value(DataCardValue_MontoHasta.Text),
+                  _rol:   DataCardValue_Rol.Selected.Value,
+                  _usr:   DataCardValue_AprobadorUsuario.Selected,
+                  _grp:   Trim(DataCardValue_AprobadorGrupo.Text)},
+                  UpdateContext({locErrorRegla:
+                      If(_hasta <= _desde,
+                         "El monto 'hasta' debe ser mayor que el monto 'desde'.",
+                         !(_rol in ["Jefe de area", "Gerente de area"]) && IsBlank(_usr) && IsBlank(_grp),
+                         "Este rol no se resuelve solo: indica un aprobador (usuario o grupo).",
+                         !IsBlank(_grp) && !IsMatch(_grp, Match.Email),
+                         "El grupo debe ser una dirección de correo válida.",
+                         "")}));
+              If(IsBlank(locErrorRegla), SubmitForm(frmRegla))
 
       # --- Parámetros ----------------------------------------------------------
       - galParametros:

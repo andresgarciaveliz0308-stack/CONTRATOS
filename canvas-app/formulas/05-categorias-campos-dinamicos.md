@@ -282,14 +282,25 @@ mirando.
 
 ---
 
-## Pendiente conocido: `frmRegla` (matriz de aprobación)
+## `frmRegla` (matriz de aprobación) — cerrado
 
-Al construir esta sección se detectó que `canvas-app/formulas/04-administracion.md`
-documenta un formulario `frmRegla` para el alta y edición de reglas de
-`MatrizAprobacion` que **nunca se declaró** en `scrAdmin.fx.yaml` — hoy esa
-sección es de solo lectura (activar/desactivar reglas existentes, más el
-simulador). No es parte de este cambio: cambiar la matriz de aprobación es más
-sensible que agregar un campo dinámico, y mezclar ambas cosas en la misma
-edición habría hecho más difícil revisar cada una por separado. Queda anotado
-para una próxima iteración, siguiendo exactamente el mismo patrón que
-`frmCategoria`/`frmCampo` de este documento.
+Al construir esta sección se había detectado que
+`canvas-app/formulas/04-administracion.md` documentaba un formulario
+`frmRegla` para el alta y edición de reglas de `MatrizAprobacion` que nunca se
+declaró en `scrAdmin.fx.yaml` — esa sección era de solo lectura (activar o
+desactivar reglas existentes, más el simulador).
+
+Ya está implementado, con el mismo patrón que `frmCategoria`/`frmCampo`:
+
+- `btnNuevaRegla` y `btnMatEditar` (uno por fila de `galMatriz`) abren
+  `frmRegla` con `Set(gblReglaEnEdicion, ...)` + `NewForm`/`EditForm`.
+- Mientras `locPanelRegla = true`, el formulario **reemplaza** a `galMatriz`
+  en el mismo espacio — nunca se muestran los dos a la vez, igual que en
+  Categorías.
+- `btnReglaGuardar` valida antes de enviar (tramo coherente, un rol que no se
+  resuelve solo necesita aprobador) y solo llama `SubmitForm(frmRegla)` si
+  `locErrorRegla` queda vacío.
+- `frmRegla.OnSuccess` refresca `colMatriz` y notifica.
+
+El detalle línea por línea, con las fórmulas exactas, está en
+`04-administracion.md` § *Alta y edición de reglas*.
