@@ -111,6 +111,11 @@ matices, está en [`docs/03-despliegue.md`](docs/03-despliegue.md).
 Requisitos: PowerShell 7+, `PnP.PowerShell`, permisos de administrador del sitio y
 licencia de Power Automate con conector premium (DocuSign).
 
+> **¿Sin acceso a PowerShell?** Todo el sistema se puede construir únicamente
+> desde el navegador: [`docs/09-sin-powershell.md`](docs/09-sin-powershell.md).
+> Toma más tiempo (2–4 horas de trabajo manual en vez de 4 minutos de script),
+> pero no requiere instalar nada.
+
 ```powershell
 Install-Module PnP.PowerShell -Scope CurrentUser
 
@@ -141,6 +146,7 @@ paso y con capturas de los puntos críticos, está en
 | [06 — Manual de usuario](docs/06-manual-usuario.md) | Guía para solicitantes, aprobadores y custodios |
 | [07 — Integración DocuSign](docs/07-docusign.md) | Cuenta, conector, plantillas y mapeo de firmantes |
 | [08 — Operación y soporte](docs/08-operacion.md) | Monitoreo, errores comunes, respaldo y retención |
+| [09 — Implementación sin PowerShell](docs/09-sin-powershell.md) | **Todo desde el navegador**, sin instalar nada ni ejecutar scripts |
 | [Flujos](power-automate/README.md) | Cada flujo acción por acción, para construirlo en el diseñador |
 | [Aplicación](canvas-app/README.md) | Cómo empaquetar o reconstruir la app, y qué queda pendiente |
 

@@ -9,6 +9,11 @@ recorriendo el circuito de aprobación.
 > usarlo con contratos reales de la empresa, revisa esa guía completa —
 > especialmente la sección de permisos y la prueba de extremo a extremo.
 
+> **¿No tienes acceso a PowerShell?** Los pasos 2, 4, 5, 6, 7 y 8 de esta guía
+> tienen su equivalente completo en el navegador en
+> [`09-sin-powershell.md`](09-sin-powershell.md). Los pasos 9 y 10 —construir la
+> app y probarla— no cambian: siempre fueron navegador puro.
+
 Antes de empezar, reemplaza estos tres valores en tu cabeza (o pégalos en un
 bloc de notas) — van a repetirse en casi todos los comandos:
 
