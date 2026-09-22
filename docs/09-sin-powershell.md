@@ -7,6 +7,33 @@ computadora, ni consola.
 
 ---
 
+## Aclaración previa: PowerShell no se paga
+
+Vale la pena despejarlo antes de seguir, porque genera confusión:
+
+| | ¿Cuesta? | Qué es |
+|---|---|---|
+| **PowerShell** | **Gratis** | Software libre de Microsoft. En Windows ya viene instalado (busca «PowerShell» en el menú Inicio). PowerShell 7 es una descarga gratuita. |
+| **PnP.PowerShell** | **Gratis** | Módulo de código abierto. Se instala con `Install-Module`. |
+| **Azure Cloud Shell** | **Requiere suscripción de Azure** | Una consola *por navegador*. Es un servicio de Azure, no es PowerShell. |
+
+Si algo te pidió una suscripción, fue **Cloud Shell**, no PowerShell.
+
+Entonces, las razones reales por las que alguien no puede usar PowerShell son
+solo tres, y ninguna se resuelve pagando:
+
+1. **La política de TI de la empresa impide instalar programas** en el equipo de
+   trabajo. Es lo más común.
+2. **El dispositivo no lo soporta** — una tablet Android o un iPad no ejecutan
+   PowerShell de forma nativa.
+3. **No hay permisos de administrador local** para instalar.
+
+En los tres casos, esta guía es la salida. Y si tu caso es el 1, considera
+también pedirle a alguien de TI que ejecute los scripts una sola vez: para
+ellos son 4 minutos, y te ahorra las 2–4 horas de trabajo manual.
+
+---
+
 ## Lo primero: qué parte realmente necesitaba PowerShell
 
 Mucho menos de lo que parece. De los 10 pasos de la guía rápida, **la app y los
