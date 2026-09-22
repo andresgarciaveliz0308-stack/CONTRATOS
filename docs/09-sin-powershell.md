@@ -453,13 +453,41 @@ funcionan.
    y resuelve todo.
 2. **Haz SharePoint en la tablet** y pide prestada una computadora solo para
    las secciones F y G.
-3. **Teclado y mouse Bluetooth + «Versión para computadora» en Chrome.** No
-   está soportado y puede fallar, pero cuesta 20 minutos comprobarlo antes de
-   comprometerte a nada.
+3. **Teclado y mouse Bluetooth + «Versión para computadora» en el navegador.**
+   No está soportado, pero *no soportado* no es lo mismo que *bloqueado*:
+   significa que Microsoft no lo prueba ni corrige errores ahí. Puede cargar y
+   funcionar a medias. La prueba de 20 minutos de abajo lo resuelve.
 4. **Replantea si necesitas Power Apps.** Una aplicación web equivalente corre
    perfecto en la tablet, sin tenant, sin Studio y sin escritorio. Si el
    dispositivo principal de quien administra el sistema es una tablet, esta
    deja de ser la opción de respaldo y pasa a ser la decisión sensata.
+
+### La prueba de 20 minutos antes de apostar horas
+
+No hay forma de saber de antemano si tu tablet concreta aguanta el diseñador.
+Averígualo con un experimento corto, **antes** de invertir las horas de
+SharePoint pensando en terminar ahí:
+
+1. Conecta **teclado y mouse Bluetooth**. Pon la tablet en horizontal.
+2. En Edge o Chrome: menú ⋮ → **Versión para computadora**.
+3. Entra a [make.powerapps.com](https://make.powerapps.com) → **Crear →
+   Aplicación en blanco → formato Tableta**.
+4. Comprueba estas cuatro cosas, en este orden:
+
+| # | Prueba | Si falla |
+|---|---|---|
+| 1 | ¿Se ven los **tres paneles** (árbol, lienzo, propiedades)? | Pantalla insuficiente: descarta |
+| 2 | **Insertar → Botón**: ¿aparece y puedes seleccionarlo? | Descarta |
+| 3 | ¿Puedes **arrastrarlo** por el lienzo y redimensionarlo? | Descarta |
+| 4 | ¿Puedes **pegar una fórmula larga** en la barra de fórmulas? | Descarta |
+
+Las cuatro tienen que pasar. La 4 es la decisiva: construir esta app son
+cientos de líneas de Power Fx pegadas en esa barra; si ahí se pelea, el resto
+no importa.
+
+**Si las cuatro pasan**, sigue adelante con cuidado y guarda seguido. **Si
+alguna falla**, no insistas: haz las secciones A–E en la tablet —que sí
+funcionan— y resuelve F y G por escritorio remoto o equipo prestado.
 
 ---
 
