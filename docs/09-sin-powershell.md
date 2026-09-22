@@ -5,6 +5,11 @@ Esta guía reemplaza los pasos 5, 6, 7 y 8 de
 navegador**. No necesitas instalar nada, ni permisos de administrador de tu
 computadora, ni consola.
 
+> **Navegador sí; tablet no del todo.** Las secciones A–E (todo SharePoint) se
+> pueden hacer desde una tablet. Construir la app en Power Apps Studio exige
+> Windows o macOS: Microsoft no admite el diseñador en Android ni iOS. El
+> detalle y las alternativas están en la [sección G](#g--la-app).
+
 ---
 
 ## Aclaración previa: PowerShell no se paga
@@ -422,6 +427,39 @@ tal cual está escrito — siempre fue navegador puro: se construye en
 
 El orden recomendado de construcción de las 7 pantallas está en
 [`canvas-app/README.md`](../canvas-app/README.md), *Camino B*.
+
+### ⚠️ «Navegador» aquí significa navegador de escritorio
+
+Esta es la única parte de la guía que **no** se puede hacer desde una tablet o
+un teléfono. Microsoft solo admite Power Apps Studio —el diseñador— en
+**Windows 10+ o macOS 10.13+**, con **Chrome o Edge**. Android e iOS aparecen
+en la documentación únicamente para *ejecutar* aplicaciones, nunca para
+construirlas
+([requisitos de sistema de Power Apps](https://learn.microsoft.com/en-us/power-apps/limits-and-config)).
+
+El diseñador de Power Automate tiene el mismo problema en la práctica: es un
+lienzo de arrastrar y soltar pensado para mouse y teclado.
+
+**Qué sí se puede hacer desde una tablet:** las secciones A a E completas —o
+sea, todo SharePoint, que es el 80 % del trabajo manual. La interfaz moderna de
+SharePoint funciona bien en tablet; las pantallas clásicas de *Configuración del
+sitio* (niveles de permiso) no son adaptables y exigen hacer zoom, pero
+funcionan.
+
+**Si la tablet es tu único equipo**, en orden de preferencia:
+
+1. **Escritorio remoto** hacia cualquier PC con Windows a la que tengas acceso
+   (Chrome Remote Desktop es gratis). Te da un escritorio real desde la tablet
+   y resuelve todo.
+2. **Haz SharePoint en la tablet** y pide prestada una computadora solo para
+   las secciones F y G.
+3. **Teclado y mouse Bluetooth + «Versión para computadora» en Chrome.** No
+   está soportado y puede fallar, pero cuesta 20 minutos comprobarlo antes de
+   comprometerte a nada.
+4. **Replantea si necesitas Power Apps.** Una aplicación web equivalente corre
+   perfecto en la tablet, sin tenant, sin Studio y sin escritorio. Si el
+   dispositivo principal de quien administra el sistema es una tablet, esta
+   deja de ser la opción de respaldo y pasa a ser la decisión sensata.
 
 ---
 
