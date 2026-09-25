@@ -12,6 +12,78 @@ computadora, ni consola.
 
 ---
 
+## El atajo: crear las 13 listas con un script en el navegador
+
+Las secciones B y C de esta guía son 134 columnas creadas a mano: entre dos y
+cuatro horas. **Hay una forma de hacerlo en un par de minutos sin instalar
+nada**, y de paso elimina por completo el riesgo de escribir mal un nombre
+interno.
+
+SharePoint tiene una API REST que responde a la sesión que ya tienes abierta en
+el navegador. El script [`sharepoint/crear-listas.js`](../sharepoint/crear-listas.js)
+la usa para crear las 13 listas y sus 134 columnas.
+
+```
+1. Abre tu sitio en Chrome o Edge, con sesión ya iniciada
+2. F12 → pestaña Consola
+3. Si el navegador lo pide, escribe:  allow pasting
+4. Pega el contenido de crear-listas.js y pulsa Enter
+```
+
+### Por qué esto sí respeta el nombre interno
+
+Es la parte que hace que valga la pena. Al crear una columna desde la interfaz,
+SharePoint deriva el nombre interno del visible y lo codifica. La API acepta un
+parámetro, `Options = 8` (`AddFieldInternalNameHint`), que **obliga a respetar el
+nombre interno declarado en el XML**. Sin ese parámetro, la propia API ignoraría
+el nombre interno y usaría el visible — el mismo problema.
+
+Dicho de otro modo: el script no es solo más rápido, es el único camino del
+navegador que garantiza los nombres correctos.
+
+### Antes de pegarlo, léelo
+
+Los navegadores advierten de no pegar código en la consola, y tienen razón: es
+una vía conocida de robo de sesión. Esa advertencia también aplica aquí, así que
+no lo pegues por confiar en mí:
+
+- Está en el repositorio, comentado en español, y son unas 200 líneas.
+- Solo llama a `TU-SITIO/_api/...`. No hay ninguna otra dirección en el archivo
+  — búscala con Ctrl+F si quieres comprobarlo.
+- No lee datos ni los envía a ningún lado: crea listas y columnas.
+- Es idempotente: comprueba antes de crear y no toca lo que ya existe, así que
+  puedes ejecutarlo de nuevo sin miedo si algo falla a mitad.
+
+### Lo que este script no hace
+
+Cubre las secciones B y C —listas, columnas e índices—, que es el grueso del
+trabajo manual. **Los permisos (D), los datos iniciales (E), los flujos (F) y la
+app (G) siguen como están descritos.** Los datos iniciales se pegan igual de
+rápido desde la vista de cuadrícula.
+
+### Su estado de verificación
+
+Se probó contra un SharePoint simulado (`tools/simular-crear-listas.js`): crea
+las 13 listas y las 134 columnas, resuelve los lookups —incluida la
+autorreferencia de `Categorias`—, no duplica nada al repetirlo y retoma bien
+tras un fallo. **No se ha ejecutado contra un tenant real de Microsoft 365**,
+igual que el resto del repositorio.
+
+Por eso: **pruébalo primero en un sitio de prueba**, no directamente en el
+definitivo. Crea un sitio `/sites/ContratosPrueba`, ejecútalo ahí, comprueba un
+par de nombres internos, y recién entonces hazlo en el bueno.
+
+### Si cambias el esquema
+
+El script se genera desde `Deploy-Contratos.ps1`, no se edita a mano:
+
+```bash
+python3 tools/generar-script-listas.py     # regenera sharepoint/crear-listas.js
+node tools/simular-crear-listas.js         # lo prueba contra el SharePoint simulado
+```
+
+---
+
 ## El acompañante de construcción
 
 Esta guía explica **el porqué** de cada paso. Para hacerlo con las manos hay una
@@ -138,6 +210,12 @@ para que la lista se vea bien cuando alguien la abre directo en SharePoint.
 ---
 
 ## B · Crear las 13 listas
+
+> **Antes de empezar a mano, mira
+> [el atajo con script](#el-atajo-crear-las-13-listas-con-un-script-en-el-navegador).**
+> Esta sección y la C son las que ese script hace en un par de minutos. Lo que
+> sigue es el procedimiento manual, que sirve igual si prefieres no pegar código
+> en la consola o si necesitas corregir una columna suelta.
 
 ### El orden importa
 
