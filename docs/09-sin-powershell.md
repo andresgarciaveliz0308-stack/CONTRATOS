@@ -12,6 +12,24 @@ computadora, ni consola.
 
 ---
 
+## El acompañante de construcción
+
+Esta guía explica **el porqué** de cada paso. Para hacerlo con las manos hay una
+página compañera con las **134 columnas listas para copiar**, los valores de
+opción exactos, los bloques de datos para pegar en la vista de cuadrícula y el
+`OnStart` completo, con el avance guardado entre sesiones:
+
+👉 **[Constructor de Contratos](https://claude.ai/artifact/BvBgscU5inUqC8JvhBcAww)**
+
+Todos sus valores se extraen automáticamente de `sharepoint/Deploy-Contratos.ps1`,
+así que no pueden desviarse de lo que el sistema espera de verdad. Úsala para
+copiar; usa este documento para entender.
+
+> Si regeneras el esquema tras cambiar el script de despliegue, vuelve a generar
+> la página: es una copia, no una vista en vivo.
+
+---
+
 ## Aclaración previa: PowerShell no se paga
 
 Vale la pena despejarlo antes de seguir, porque genera confusión:
@@ -182,9 +200,16 @@ Tres detalles que se pasan por alto:
 - **La columna `Title` ya existe** en toda lista nueva — no la crees. En varias
   listas el modelo de datos la usa con otro significado (en `Contratos` es el
   código `CTR-AAAA-NNNN`, en `Parametros` es la clave). Solo renómbrala.
-- **Las columnas de tipo Elección**: escribe los valores **exactamente** como
-  aparecen en el catálogo, con tildes y todo (`Confidencialidad (NDA)`,
-  `Renovación automática`). Los flujos comparan texto literal.
+- **Las columnas de tipo Elección: los valores van SIN TILDES.** El sistema real
+  usa `En aprobacion`, `Renovacion automatica`, `Entidad publica` — sin acentos.
+  Las tablas de [`02-modelo-datos.md`](02-modelo-datos.md) los muestran
+  acentuados porque son prosa legible, pero **los literales verdaderos no
+  llevan tilde**, y los flujos comparan texto exacto: `En aprobación` y
+  `En aprobacion` son dos valores distintos y el contrato se detiene.
+  Cópialos del [acompañante de construcción](#el-acompañante-de-construcción),
+  que los extrae del script de despliegue, o de
+  `sharepoint/Deploy-Contratos.ps1` directamente. Ojo también con
+  `Convenio / Adendum marco` (una sola `d`).
 - **Desactiva «Agregar a todos los tipos de contenido»** si aparece — no hace
   daño, pero ensucia la lista.
 

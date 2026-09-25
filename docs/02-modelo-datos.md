@@ -7,6 +7,20 @@ Todo vive en un único sitio de SharePoint Online (`/sites/Contratos`): **13 lis
 > tablas) son los que usan Power Fx y Power Automate. Nunca los cambies. Los nombres
 > visibles sí se pueden renombrar libremente desde la interfaz.
 
+> **⚠️ Los valores de las columnas de Elección van sin tildes.** Este documento
+> los escribe acentuados porque es prosa legible («Renovación automática»), pero
+> el sistema real usa `Renovacion automatica`, `En aprobacion`,
+> `Entidad publica`, `Convenio / Adendum marco` — sin acentos, y `Adendum` con
+> una sola `d`. Las tres capas (script, flujos y app) concuerdan entre sí en la
+> forma sin tildes; es esta tabla la que embellece.
+>
+> Da igual mientras despliegues con `Deploy-Contratos.ps1`, porque el script
+> escribe los valores por ti. **Importa si creas las columnas a mano**: los
+> flujos comparan texto literal, y un acento de más deja contratos detenidos sin
+> ningún error visible. Para crear columnas manualmente, toma los valores de
+> `sharepoint/Deploy-Contratos.ps1` o del acompañante de construcción descrito
+> en [`09-sin-powershell.md`](09-sin-powershell.md), nunca de estas tablas.
+
 ```
                           ┌──────────────┐
                           │    Areas     │
