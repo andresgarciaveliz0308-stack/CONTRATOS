@@ -73,6 +73,22 @@ Por eso: **pruébalo primero en un sitio de prueba**, no directamente en el
 definitivo. Crea un sitio `/sites/ContratosPrueba`, ejecútalo ahí, comprueba un
 par de nombres internos, y recién entonces hazlo en el bueno.
 
+### Desde una tablet, donde no hay consola
+
+Chrome y Edge para Android no tienen herramientas de desarrollador: **F12 no
+existe ahí**. Para ese caso está el mismo trabajo empaquetado como flujo de
+Power Automate, que hace idénticas llamadas REST desde la interfaz web:
+
+**[`power-automate/90-crear-listas/`](../power-automate/90-crear-listas/)** —
+se importa el `.zip`, se asigna la conexión de SharePoint y se ejecuta pasando
+la URL del sitio. Todo desde el navegador de la tablet.
+
+Usa la acción *Enviar una solicitud HTTP a SharePoint*, que es **conector
+estándar**: no requiere licencia premium y resuelve la autenticación sola.
+
+> En una computadora prefiere el script de consola: menos piezas que puedan
+> fallar. El flujo existe para cuando la consola no es una opción.
+
 ### Si cambias el esquema
 
 El script se genera desde `Deploy-Contratos.ps1`, no se edita a mano:

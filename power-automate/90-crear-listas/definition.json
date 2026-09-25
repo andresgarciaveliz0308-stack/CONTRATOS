@@ -1,0 +1,991 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Crea las 13 listas y las 134 columnas del sistema de Contratos via REST, sin PowerShell ni consola del navegador.",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    }
+  },
+  "triggers": {
+    "Ejecutar_manualmente": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "title": "URL del sitio de SharePoint",
+              "description": "https://TU-TENANT.sharepoint.com/sites/Contratos",
+              "x-ms-dynamically-added": true
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Las_listas": {
+      "type": "Compose",
+      "inputs": [
+        {
+          "t": "Areas",
+          "p": 100,
+          "d": "Areas de la organizacion."
+        },
+        {
+          "t": "Parametros",
+          "p": 100,
+          "d": "Configuracion global."
+        },
+        {
+          "t": "Categorias",
+          "p": 100,
+          "d": "Carpetas administrables."
+        },
+        {
+          "t": "CamposPersonalizados",
+          "p": 100,
+          "d": "Esquema de campos por categoria."
+        },
+        {
+          "t": "Contratos",
+          "p": 100,
+          "d": "Maestro de contratos.",
+          "v": true
+        },
+        {
+          "t": "DocumentosContratos",
+          "p": 101,
+          "d": "Biblioteca de custodia digital.",
+          "v": true,
+          "mv": true
+        },
+        {
+          "t": "MatrizAprobacion",
+          "p": 100,
+          "d": "Reglas de aprobacion."
+        },
+        {
+          "t": "Aprobaciones",
+          "p": 100,
+          "d": "Historial inmutable de decisiones."
+        },
+        {
+          "t": "Adendas",
+          "p": 100,
+          "d": "Modificaciones a contratos vigentes."
+        },
+        {
+          "t": "MovimientosCustodia",
+          "p": 100,
+          "d": "Cadena de custodia del original."
+        },
+        {
+          "t": "Alertas",
+          "p": 100,
+          "d": "Bitacora de notificaciones."
+        },
+        {
+          "t": "Bitacora",
+          "p": 100,
+          "d": "Auditoria funcional."
+        },
+        {
+          "t": "ContratosCamposValor",
+          "p": 100,
+          "d": "Valores del esquema dinamico (EAV)."
+        }
+      ],
+      "runAfter": {},
+      "description": "Las 13 listas. Generado desde Deploy-Contratos.ps1: no editar a mano."
+    },
+    "Crear_las_listas": {
+      "type": "Foreach",
+      "foreach": "@outputs('Las_listas')",
+      "actions": {
+        "Crear_lista": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@{triggerBody()['text']}",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose"
+              },
+              "parameters/body": {
+                "__metadata": {
+                  "type": "SP.List"
+                },
+                "Title": "@items('Crear_las_listas')['t']",
+                "BaseTemplate": "@items('Crear_las_listas')['p']",
+                "Description": "@items('Crear_las_listas')['d']",
+                "AllowContentTypes": false,
+                "ContentTypesEnabled": false,
+                "EnableVersioning": "@coalesce(items('Crear_las_listas')?['v'], false)",
+                "EnableMinorVersions": "@coalesce(items('Crear_las_listas')?['mv'], false)"
+              }
+            }
+          },
+          "runAfter": {}
+        }
+      },
+      "runAfter": {
+        "Las_listas": [
+          "Succeeded"
+        ]
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "description": "Una lista que ya existe hace fallar su iteracion. Es esperado: la accion siguiente corre igual y solo se crea lo que falta."
+    },
+    "Id_Areas": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('Areas')?$select=Id",
+          "parameters/headers": {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose"
+          }
+        }
+      },
+      "runAfter": {
+        "Crear_las_listas": [
+          "Succeeded",
+          "Failed"
+        ]
+      }
+    },
+    "Id_Categorias": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('Categorias')?$select=Id",
+          "parameters/headers": {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose"
+          }
+        }
+      },
+      "runAfter": {
+        "Id_Areas": [
+          "Succeeded",
+          "Failed"
+        ]
+      }
+    },
+    "Id_Contratos": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('Contratos')?$select=Id",
+          "parameters/headers": {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose"
+          }
+        }
+      },
+      "runAfter": {
+        "Id_Categorias": [
+          "Succeeded",
+          "Failed"
+        ]
+      }
+    },
+    "Id_Campos": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('CamposPersonalizados')?$select=Id",
+          "parameters/headers": {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose"
+          }
+        }
+      },
+      "runAfter": {
+        "Id_Contratos": [
+          "Succeeded",
+          "Failed"
+        ]
+      }
+    },
+    "Los_campos": {
+      "type": "Compose",
+      "inputs": [
+        {
+          "l": "Areas",
+          "n": "CodigoArea",
+          "x": "<Field Type=\"Text\" Name=\"CodigoArea\" StaticName=\"CodigoArea\" DisplayName=\"Codigo\" MaxLength=\"20\" />"
+        },
+        {
+          "l": "Areas",
+          "n": "Responsable",
+          "x": "<Field Type=\"User\" Name=\"Responsable\" StaticName=\"Responsable\" DisplayName=\"Responsable\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Areas",
+          "n": "Gerente",
+          "x": "<Field Type=\"User\" Name=\"Gerente\" StaticName=\"Gerente\" DisplayName=\"Gerente\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Areas",
+          "n": "CentroCosto",
+          "x": "<Field Type=\"Text\" Name=\"CentroCosto\" StaticName=\"CentroCosto\" DisplayName=\"Centro de costo\" MaxLength=\"50\" />"
+        },
+        {
+          "l": "Areas",
+          "n": "Activo",
+          "x": "<Field Type=\"Boolean\" Name=\"Activo\" StaticName=\"Activo\" DisplayName=\"Activo\"><Default>1</Default></Field>"
+        },
+        {
+          "l": "Parametros",
+          "n": "Valor",
+          "x": "<Field Type=\"Text\" Name=\"Valor\" StaticName=\"Valor\" DisplayName=\"Valor\" Required=\"TRUE\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "Parametros",
+          "n": "Descripcion",
+          "x": "<Field Type=\"Note\" Name=\"Descripcion\" StaticName=\"Descripcion\" DisplayName=\"Descripcion\" NumLines=\"3\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Parametros",
+          "n": "Tipo",
+          "x": "<Field Type=\"Choice\" Name=\"Tipo\" StaticName=\"Tipo\" DisplayName=\"Tipo\"><CHOICES><CHOICE>Texto</CHOICE><CHOICE>Numero</CHOICE><CHOICE>Fecha</CHOICE><CHOICE>Booleano</CHOICE><CHOICE>Correo</CHOICE></CHOICES><Default>Texto</Default></Field>"
+        },
+        {
+          "l": "Categorias",
+          "n": "CategoriaPadre",
+          "x": "<Field Type=\"Lookup\" Name=\"CategoriaPadre\" StaticName=\"CategoriaPadre\" DisplayName=\"Categoria padre\" List=\"{__ID_CATEGORIAS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Categorias",
+          "n": "Icono",
+          "x": "<Field Type=\"Text\" Name=\"Icono\" StaticName=\"Icono\" DisplayName=\"Icono\" MaxLength=\"60\" />"
+        },
+        {
+          "l": "Categorias",
+          "n": "Color",
+          "x": "<Field Type=\"Text\" Name=\"Color\" StaticName=\"Color\" DisplayName=\"Color\" MaxLength=\"10\" />"
+        },
+        {
+          "l": "Categorias",
+          "n": "ResponsableAdicional",
+          "x": "<Field Type=\"User\" Name=\"ResponsableAdicional\" StaticName=\"ResponsableAdicional\" DisplayName=\"Responsable adicional\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Categorias",
+          "n": "Orden",
+          "x": "<Field Type=\"Number\" Name=\"Orden\" StaticName=\"Orden\" DisplayName=\"Orden\" Decimals=\"0\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Categorias",
+          "n": "Activo",
+          "x": "<Field Type=\"Boolean\" Name=\"Activo\" StaticName=\"Activo\" DisplayName=\"Activo\"><Default>1</Default></Field>"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Categoria",
+          "x": "<Field Type=\"Lookup\" Name=\"Categoria\" StaticName=\"Categoria\" DisplayName=\"Categoria\" Indexed=\"TRUE\" List=\"{__ID_CATEGORIAS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Etiqueta",
+          "x": "<Field Type=\"Text\" Name=\"Etiqueta\" StaticName=\"Etiqueta\" DisplayName=\"Etiqueta\" Required=\"TRUE\" MaxLength=\"150\" />"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "TipoDato",
+          "x": "<Field Type=\"Choice\" Name=\"TipoDato\" StaticName=\"TipoDato\" DisplayName=\"Tipo de dato\" Required=\"TRUE\"><CHOICES><CHOICE>Texto</CHOICE><CHOICE>Numero</CHOICE><CHOICE>Fecha</CHOICE><CHOICE>Booleano</CHOICE><CHOICE>Opcion</CHOICE></CHOICES></Field>"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Opciones",
+          "x": "<Field Type=\"Text\" Name=\"Opciones\" StaticName=\"Opciones\" DisplayName=\"Opciones\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Seccion",
+          "x": "<Field Type=\"Text\" Name=\"Seccion\" StaticName=\"Seccion\" DisplayName=\"Seccion\" MaxLength=\"100\" />"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Obligatorio",
+          "x": "<Field Type=\"Boolean\" Name=\"Obligatorio\" StaticName=\"Obligatorio\" DisplayName=\"Obligatorio\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Orden",
+          "x": "<Field Type=\"Number\" Name=\"Orden\" StaticName=\"Orden\" DisplayName=\"Orden\" Decimals=\"0\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Ayuda",
+          "x": "<Field Type=\"Text\" Name=\"Ayuda\" StaticName=\"Ayuda\" DisplayName=\"Ayuda\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "n": "Activo",
+          "x": "<Field Type=\"Boolean\" Name=\"Activo\" StaticName=\"Activo\" DisplayName=\"Activo\"><Default>1</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "NombreContrato",
+          "x": "<Field Type=\"Text\" Name=\"NombreContrato\" StaticName=\"NombreContrato\" DisplayName=\"Nombre del contrato\" Required=\"TRUE\" Indexed=\"TRUE\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "TipoContrato",
+          "x": "<Field Type=\"Choice\" Name=\"TipoContrato\" StaticName=\"TipoContrato\" DisplayName=\"Tipo de contrato\" Required=\"TRUE\" Indexed=\"TRUE\"><CHOICES><CHOICE>Servicios</CHOICE><CHOICE>Suministro de bienes</CHOICE><CHOICE>Obra</CHOICE><CHOICE>Arrendamiento</CHOICE><CHOICE>Confidencialidad (NDA)</CHOICE><CHOICE>Licencia de software</CHOICE><CHOICE>Distribucion</CHOICE><CHOICE>Agencia / Representacion</CHOICE><CHOICE>Laboral</CHOICE><CHOICE>Seguros</CHOICE><CHOICE>Financiero</CHOICE><CHOICE>Convenio / Adendum marco</CHOICE><CHOICE>Otro</CHOICE></CHOICES></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "ObjetoContrato",
+          "x": "<Field Type=\"Note\" Name=\"ObjetoContrato\" StaticName=\"ObjetoContrato\" DisplayName=\"Objeto del contrato\" NumLines=\"6\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "ContratoPadre",
+          "x": "<Field Type=\"Lookup\" Name=\"ContratoPadre\" StaticName=\"ContratoPadre\" DisplayName=\"Contrato relacionado\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Categoria",
+          "x": "<Field Type=\"Lookup\" Name=\"Categoria\" StaticName=\"Categoria\" DisplayName=\"Categoria\" Indexed=\"TRUE\" List=\"{__ID_CATEGORIAS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Contraparte",
+          "x": "<Field Type=\"Text\" Name=\"Contraparte\" StaticName=\"Contraparte\" DisplayName=\"Contraparte\" Required=\"TRUE\" Indexed=\"TRUE\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "ContraparteRUC",
+          "x": "<Field Type=\"Text\" Name=\"ContraparteRUC\" StaticName=\"ContraparteRUC\" DisplayName=\"RUC / Doc. identidad\" MaxLength=\"20\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "TipoContraparte",
+          "x": "<Field Type=\"Choice\" Name=\"TipoContraparte\" StaticName=\"TipoContraparte\" DisplayName=\"Tipo de contraparte\"><CHOICES><CHOICE>Proveedor</CHOICE><CHOICE>Cliente</CHOICE><CHOICE>Empleado</CHOICE><CHOICE>Socio comercial</CHOICE><CHOICE>Entidad publica</CHOICE><CHOICE>Otro</CHOICE></CHOICES><Default>Proveedor</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "ContraparteContacto",
+          "x": "<Field Type=\"Text\" Name=\"ContraparteContacto\" StaticName=\"ContraparteContacto\" DisplayName=\"Contacto (firmante)\" MaxLength=\"150\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "ContraparteCorreo",
+          "x": "<Field Type=\"Text\" Name=\"ContraparteCorreo\" StaticName=\"ContraparteCorreo\" DisplayName=\"Correo del firmante\" MaxLength=\"150\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "AreaSolicitante",
+          "x": "<Field Type=\"Lookup\" Name=\"AreaSolicitante\" StaticName=\"AreaSolicitante\" DisplayName=\"Area solicitante\" Required=\"TRUE\" List=\"{__ID_AREAS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Solicitante",
+          "x": "<Field Type=\"User\" Name=\"Solicitante\" StaticName=\"Solicitante\" DisplayName=\"Solicitante\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "ResponsableContrato",
+          "x": "<Field Type=\"User\" Name=\"ResponsableContrato\" StaticName=\"ResponsableContrato\" DisplayName=\"Responsable del contrato\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Moneda",
+          "x": "<Field Type=\"Choice\" Name=\"Moneda\" StaticName=\"Moneda\" DisplayName=\"Moneda\"><CHOICES><CHOICE>PEN</CHOICE><CHOICE>USD</CHOICE><CHOICE>EUR</CHOICE></CHOICES><Default>PEN</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "Monto",
+          "x": "<Field Type=\"Number\" Name=\"Monto\" StaticName=\"Monto\" DisplayName=\"Monto\" Decimals=\"2\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "MontoPEN",
+          "x": "<Field Type=\"Number\" Name=\"MontoPEN\" StaticName=\"MontoPEN\" DisplayName=\"Monto en PEN\" Decimals=\"2\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "TipoCambio",
+          "x": "<Field Type=\"Number\" Name=\"TipoCambio\" StaticName=\"TipoCambio\" DisplayName=\"Tipo de cambio\" Decimals=\"4\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "SinMontoDeterminado",
+          "x": "<Field Type=\"Boolean\" Name=\"SinMontoDeterminado\" StaticName=\"SinMontoDeterminado\" DisplayName=\"Monto no determinado\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "FechaInicio",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaInicio\" StaticName=\"FechaInicio\" DisplayName=\"Fecha de inicio\" Required=\"TRUE\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "FechaFin",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaFin\" StaticName=\"FechaFin\" DisplayName=\"Fecha de fin\" Indexed=\"TRUE\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "VigenciaIndefinida",
+          "x": "<Field Type=\"Boolean\" Name=\"VigenciaIndefinida\" StaticName=\"VigenciaIndefinida\" DisplayName=\"Vigencia indefinida\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "RenovacionAutomatica",
+          "x": "<Field Type=\"Boolean\" Name=\"RenovacionAutomatica\" StaticName=\"RenovacionAutomatica\" DisplayName=\"Renovacion automatica\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "DiasPreaviso",
+          "x": "<Field Type=\"Number\" Name=\"DiasPreaviso\" StaticName=\"DiasPreaviso\" DisplayName=\"Dias de preaviso\" Decimals=\"0\"><Default>30</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "FechaPreaviso",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaPreaviso\" StaticName=\"FechaPreaviso\" DisplayName=\"Fecha de preaviso\" Indexed=\"TRUE\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Estado",
+          "x": "<Field Type=\"Choice\" Name=\"Estado\" StaticName=\"Estado\" DisplayName=\"Estado\" Indexed=\"TRUE\"><CHOICES><CHOICE>Borrador</CHOICE><CHOICE>En revision legal</CHOICE><CHOICE>En aprobacion</CHOICE><CHOICE>Aprobado</CHOICE><CHOICE>En firma</CHOICE><CHOICE>Vigente</CHOICE><CHOICE>Por vencer</CHOICE><CHOICE>Vencido</CHOICE><CHOICE>Renovado</CHOICE><CHOICE>Terminado</CHOICE><CHOICE>Rechazado</CHOICE><CHOICE>Anulado</CHOICE></CHOICES><Default>Borrador</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "NivelAprobacionRequerido",
+          "x": "<Field Type=\"Number\" Name=\"NivelAprobacionRequerido\" StaticName=\"NivelAprobacionRequerido\" DisplayName=\"Nivel requerido\" Decimals=\"0\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "NivelAprobacionActual",
+          "x": "<Field Type=\"Number\" Name=\"NivelAprobacionActual\" StaticName=\"NivelAprobacionActual\" DisplayName=\"Nivel actual\" Decimals=\"0\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "CicloAprobacion",
+          "x": "<Field Type=\"Number\" Name=\"CicloAprobacion\" StaticName=\"CicloAprobacion\" DisplayName=\"Ciclo de aprobacion\" Decimals=\"0\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "FechaEnvioAprobacion",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaEnvioAprobacion\" StaticName=\"FechaEnvioAprobacion\" DisplayName=\"Enviado a aprobacion\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "FechaAprobacionFinal",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaAprobacionFinal\" StaticName=\"FechaAprobacionFinal\" DisplayName=\"Aprobacion final\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "MotivoRechazo",
+          "x": "<Field Type=\"Note\" Name=\"MotivoRechazo\" StaticName=\"MotivoRechazo\" DisplayName=\"Motivo de rechazo\" NumLines=\"4\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "DocuSignEnvelopeId",
+          "x": "<Field Type=\"Text\" Name=\"DocuSignEnvelopeId\" StaticName=\"DocuSignEnvelopeId\" DisplayName=\"Sobre DocuSign\" MaxLength=\"100\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "DocuSignEstado",
+          "x": "<Field Type=\"Choice\" Name=\"DocuSignEstado\" StaticName=\"DocuSignEstado\" DisplayName=\"Estado DocuSign\"><CHOICES><CHOICE>No enviado</CHOICE><CHOICE>Enviado</CHOICE><CHOICE>Entregado</CHOICE><CHOICE>Firmado</CHOICE><CHOICE>Completado</CHOICE><CHOICE>Rechazado</CHOICE><CHOICE>Anulado</CHOICE></CHOICES><Default>No enviado</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "FechaFirma",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaFirma\" StaticName=\"FechaFirma\" DisplayName=\"Fecha de firma\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "EstadoCustodia",
+          "x": "<Field Type=\"Choice\" Name=\"EstadoCustodia\" StaticName=\"EstadoCustodia\" DisplayName=\"Estado de custodia\" Indexed=\"TRUE\"><CHOICES><CHOICE>Pendiente de recepcion</CHOICE><CHOICE>En custodia</CHOICE><CHOICE>Prestado</CHOICE><CHOICE>Solo digital</CHOICE><CHOICE>Dado de baja</CHOICE></CHOICES><Default>Pendiente de recepcion</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "Custodio",
+          "x": "<Field Type=\"User\" Name=\"Custodio\" StaticName=\"Custodio\" DisplayName=\"Custodio\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "UbicacionFisica",
+          "x": "<Field Type=\"Text\" Name=\"UbicacionFisica\" StaticName=\"UbicacionFisica\" DisplayName=\"Ubicacion fisica\" MaxLength=\"150\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "FechaRecepcionOriginal",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaRecepcionOriginal\" StaticName=\"FechaRecepcionOriginal\" DisplayName=\"Recepcion del original\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Clasificacion",
+          "x": "<Field Type=\"Choice\" Name=\"Clasificacion\" StaticName=\"Clasificacion\" DisplayName=\"Clasificacion\"><CHOICES><CHOICE>Publico</CHOICE><CHOICE>Interno</CHOICE><CHOICE>Confidencial</CHOICE><CHOICE>Restringido</CHOICE></CHOICES><Default>Interno</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "ObligacionesClave",
+          "x": "<Field Type=\"Note\" Name=\"ObligacionesClave\" StaticName=\"ObligacionesClave\" DisplayName=\"Obligaciones clave\" NumLines=\"6\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Penalidades",
+          "x": "<Field Type=\"Note\" Name=\"Penalidades\" StaticName=\"Penalidades\" DisplayName=\"Penalidades\" NumLines=\"4\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "TieneGarantia",
+          "x": "<Field Type=\"Boolean\" Name=\"TieneGarantia\" StaticName=\"TieneGarantia\" DisplayName=\"Tiene garantia\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "TipoGarantia",
+          "x": "<Field Type=\"Choice\" Name=\"TipoGarantia\" StaticName=\"TipoGarantia\" DisplayName=\"Tipo de garantia\"><CHOICES><CHOICE>Carta fianza</CHOICE><CHOICE>Retencion</CHOICE><CHOICE>Deposito en garantia</CHOICE><CHOICE>Poliza de caucion</CHOICE><CHOICE>Otra</CHOICE></CHOICES></Field>"
+        },
+        {
+          "l": "Contratos",
+          "n": "MontoGarantia",
+          "x": "<Field Type=\"Number\" Name=\"MontoGarantia\" StaticName=\"MontoGarantia\" DisplayName=\"Monto de garantia\" Decimals=\"2\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "VencimientoGarantia",
+          "x": "<Field Type=\"DateTime\" Name=\"VencimientoGarantia\" StaticName=\"VencimientoGarantia\" DisplayName=\"Vencimiento de garantia\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "Contratos",
+          "n": "Notas",
+          "x": "<Field Type=\"Note\" Name=\"Notas\" StaticName=\"Notas\" DisplayName=\"Notas\" NumLines=\"6\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "DocumentosContratos",
+          "n": "Contrato",
+          "x": "<Field Type=\"Lookup\" Name=\"Contrato\" StaticName=\"Contrato\" DisplayName=\"Contrato\" Required=\"TRUE\" Indexed=\"TRUE\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "DocumentosContratos",
+          "n": "TipoDocumento",
+          "x": "<Field Type=\"Choice\" Name=\"TipoDocumento\" StaticName=\"TipoDocumento\" DisplayName=\"Tipo de documento\" Required=\"TRUE\"><CHOICES><CHOICE>Contrato original</CHOICE><CHOICE>Adenda</CHOICE><CHOICE>Anexo</CHOICE><CHOICE>Cotizacion</CHOICE><CHOICE>Orden de compra</CHOICE><CHOICE>Carta fianza</CHOICE><CHOICE>Acta de recepcion</CHOICE><CHOICE>Sustento de aprobacion</CHOICE><CHOICE>Sobre firmado</CHOICE><CHOICE>Otro</CHOICE></CHOICES><Default>Contrato original</Default></Field>"
+        },
+        {
+          "l": "DocumentosContratos",
+          "n": "VersionDocumento",
+          "x": "<Field Type=\"Text\" Name=\"VersionDocumento\" StaticName=\"VersionDocumento\" DisplayName=\"Version del documento\" MaxLength=\"30\" />"
+        },
+        {
+          "l": "DocumentosContratos",
+          "n": "FechaDocumento",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaDocumento\" StaticName=\"FechaDocumento\" DisplayName=\"Fecha del documento\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "DocumentosContratos",
+          "n": "EsPrincipal",
+          "x": "<Field Type=\"Boolean\" Name=\"EsPrincipal\" StaticName=\"EsPrincipal\" DisplayName=\"Es documento principal\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "DocumentosContratos",
+          "n": "EstaFirmado",
+          "x": "<Field Type=\"Boolean\" Name=\"EstaFirmado\" StaticName=\"EstaFirmado\" DisplayName=\"Esta firmado\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "DocumentosContratos",
+          "n": "EsConfidencial",
+          "x": "<Field Type=\"Boolean\" Name=\"EsConfidencial\" StaticName=\"EsConfidencial\" DisplayName=\"Confidencial\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "TipoContrato",
+          "x": "<Field Type=\"Choice\" Name=\"TipoContrato\" StaticName=\"TipoContrato\" DisplayName=\"Tipo de contrato\" Required=\"TRUE\"><CHOICES><CHOICE>Todos</CHOICE><CHOICE>Servicios</CHOICE><CHOICE>Suministro de bienes</CHOICE><CHOICE>Obra</CHOICE><CHOICE>Arrendamiento</CHOICE><CHOICE>Confidencialidad (NDA)</CHOICE><CHOICE>Licencia de software</CHOICE><CHOICE>Distribucion</CHOICE><CHOICE>Agencia / Representacion</CHOICE><CHOICE>Laboral</CHOICE><CHOICE>Seguros</CHOICE><CHOICE>Financiero</CHOICE><CHOICE>Convenio / Adendum marco</CHOICE><CHOICE>Otro</CHOICE></CHOICES><Default>Todos</Default></Field>"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "MontoDesdePEN",
+          "x": "<Field Type=\"Number\" Name=\"MontoDesdePEN\" StaticName=\"MontoDesdePEN\" DisplayName=\"Monto desde (PEN)\" Required=\"TRUE\" Decimals=\"2\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "MontoHastaPEN",
+          "x": "<Field Type=\"Number\" Name=\"MontoHastaPEN\" StaticName=\"MontoHastaPEN\" DisplayName=\"Monto hasta (PEN)\" Required=\"TRUE\" Decimals=\"2\" />"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "Nivel",
+          "x": "<Field Type=\"Number\" Name=\"Nivel\" StaticName=\"Nivel\" DisplayName=\"Nivel\" Required=\"TRUE\" Decimals=\"0\" />"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "RolAprobador",
+          "x": "<Field Type=\"Choice\" Name=\"RolAprobador\" StaticName=\"RolAprobador\" DisplayName=\"Rol del aprobador\" Required=\"TRUE\"><CHOICES><CHOICE>Jefe de area</CHOICE><CHOICE>Gerente de area</CHOICE><CHOICE>Legal</CHOICE><CHOICE>Finanzas</CHOICE><CHOICE>Compras</CHOICE><CHOICE>Gerencia General</CHOICE><CHOICE>Directorio</CHOICE><CHOICE>Usuario especifico</CHOICE></CHOICES></Field>"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "AprobadorUsuario",
+          "x": "<Field Type=\"User\" Name=\"AprobadorUsuario\" StaticName=\"AprobadorUsuario\" DisplayName=\"Aprobador (usuario)\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "AprobadorGrupo",
+          "x": "<Field Type=\"Text\" Name=\"AprobadorGrupo\" StaticName=\"AprobadorGrupo\" DisplayName=\"Aprobador (grupo)\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "Obligatorio",
+          "x": "<Field Type=\"Boolean\" Name=\"Obligatorio\" StaticName=\"Obligatorio\" DisplayName=\"Obligatorio\"><Default>1</Default></Field>"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "SLAHoras",
+          "x": "<Field Type=\"Number\" Name=\"SLAHoras\" StaticName=\"SLAHoras\" DisplayName=\"SLA (horas)\" Decimals=\"0\"><Default>48</Default></Field>"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "n": "Activo",
+          "x": "<Field Type=\"Boolean\" Name=\"Activo\" StaticName=\"Activo\" DisplayName=\"Activo\"><Default>1</Default></Field>"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "Contrato",
+          "x": "<Field Type=\"Lookup\" Name=\"Contrato\" StaticName=\"Contrato\" DisplayName=\"Contrato\" Required=\"TRUE\" Indexed=\"TRUE\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "Nivel",
+          "x": "<Field Type=\"Number\" Name=\"Nivel\" StaticName=\"Nivel\" DisplayName=\"Nivel\" Decimals=\"0\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "Ciclo",
+          "x": "<Field Type=\"Number\" Name=\"Ciclo\" StaticName=\"Ciclo\" DisplayName=\"Ciclo\" Decimals=\"0\"><Default>1</Default></Field>"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "RolAprobador",
+          "x": "<Field Type=\"Text\" Name=\"RolAprobador\" StaticName=\"RolAprobador\" DisplayName=\"Rol del aprobador\" MaxLength=\"100\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "AprobadorAsignado",
+          "x": "<Field Type=\"User\" Name=\"AprobadorAsignado\" StaticName=\"AprobadorAsignado\" DisplayName=\"Aprobador asignado\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "ResueltoPor",
+          "x": "<Field Type=\"User\" Name=\"ResueltoPor\" StaticName=\"ResueltoPor\" DisplayName=\"Resuelto por\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "Decision",
+          "x": "<Field Type=\"Choice\" Name=\"Decision\" StaticName=\"Decision\" DisplayName=\"Decision\" Indexed=\"TRUE\"><CHOICES><CHOICE>Pendiente</CHOICE><CHOICE>Aprobado</CHOICE><CHOICE>Rechazado</CHOICE><CHOICE>Devuelto</CHOICE><CHOICE>Delegado</CHOICE><CHOICE>Omitido</CHOICE><CHOICE>Vencido</CHOICE></CHOICES><Default>Pendiente</Default></Field>"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "Comentarios",
+          "x": "<Field Type=\"Note\" Name=\"Comentarios\" StaticName=\"Comentarios\" DisplayName=\"Comentarios\" NumLines=\"4\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "FechaSolicitud",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaSolicitud\" StaticName=\"FechaSolicitud\" DisplayName=\"Fecha de solicitud\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "FechaDecision",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaDecision\" StaticName=\"FechaDecision\" DisplayName=\"Fecha de decision\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "HorasTranscurridas",
+          "x": "<Field Type=\"Number\" Name=\"HorasTranscurridas\" StaticName=\"HorasTranscurridas\" DisplayName=\"Horas transcurridas\" Decimals=\"1\" />"
+        },
+        {
+          "l": "Aprobaciones",
+          "n": "InstanciaFlujo",
+          "x": "<Field Type=\"Text\" Name=\"InstanciaFlujo\" StaticName=\"InstanciaFlujo\" DisplayName=\"Instancia del flujo\" MaxLength=\"100\" />"
+        },
+        {
+          "l": "Adendas",
+          "n": "Contrato",
+          "x": "<Field Type=\"Lookup\" Name=\"Contrato\" StaticName=\"Contrato\" DisplayName=\"Contrato\" Required=\"TRUE\" Indexed=\"TRUE\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Adendas",
+          "n": "NumeroAdenda",
+          "x": "<Field Type=\"Number\" Name=\"NumeroAdenda\" StaticName=\"NumeroAdenda\" DisplayName=\"Numero de adenda\" Decimals=\"0\" />"
+        },
+        {
+          "l": "Adendas",
+          "n": "TipoAdenda",
+          "x": "<Field Type=\"Choice\" Name=\"TipoAdenda\" StaticName=\"TipoAdenda\" DisplayName=\"Tipo de adenda\" Required=\"TRUE\"><CHOICES><CHOICE>Prorroga de plazo</CHOICE><CHOICE>Ampliacion de monto</CHOICE><CHOICE>Reduccion de monto</CHOICE><CHOICE>Cambio de alcance</CHOICE><CHOICE>Cesion de posicion</CHOICE><CHOICE>Resolucion anticipada</CHOICE><CHOICE>Otro</CHOICE></CHOICES></Field>"
+        },
+        {
+          "l": "Adendas",
+          "n": "FechaAdenda",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaAdenda\" StaticName=\"FechaAdenda\" DisplayName=\"Fecha de la adenda\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "Adendas",
+          "n": "MontoDelta",
+          "x": "<Field Type=\"Number\" Name=\"MontoDelta\" StaticName=\"MontoDelta\" DisplayName=\"Variacion de monto\" Decimals=\"2\" />"
+        },
+        {
+          "l": "Adendas",
+          "n": "NuevaFechaFin",
+          "x": "<Field Type=\"DateTime\" Name=\"NuevaFechaFin\" StaticName=\"NuevaFechaFin\" DisplayName=\"Nueva fecha de fin\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "Adendas",
+          "n": "Descripcion",
+          "x": "<Field Type=\"Note\" Name=\"Descripcion\" StaticName=\"Descripcion\" DisplayName=\"Descripcion\" NumLines=\"6\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Adendas",
+          "n": "Estado",
+          "x": "<Field Type=\"Choice\" Name=\"Estado\" StaticName=\"Estado\" DisplayName=\"Estado\"><CHOICES><CHOICE>Borrador</CHOICE><CHOICE>En aprobacion</CHOICE><CHOICE>Aprobada</CHOICE><CHOICE>Rechazada</CHOICE></CHOICES><Default>Borrador</Default></Field>"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "Contrato",
+          "x": "<Field Type=\"Lookup\" Name=\"Contrato\" StaticName=\"Contrato\" DisplayName=\"Contrato\" Required=\"TRUE\" Indexed=\"TRUE\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "TipoMovimiento",
+          "x": "<Field Type=\"Choice\" Name=\"TipoMovimiento\" StaticName=\"TipoMovimiento\" DisplayName=\"Tipo de movimiento\" Required=\"TRUE\"><CHOICES><CHOICE>Recepcion de original</CHOICE><CHOICE>Prestamo</CHOICE><CHOICE>Devolucion</CHOICE><CHOICE>Traslado</CHOICE><CHOICE>Digitalizacion</CHOICE><CHOICE>Baja / Destruccion</CHOICE></CHOICES></Field>"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "FechaMovimiento",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaMovimiento\" StaticName=\"FechaMovimiento\" DisplayName=\"Fecha del movimiento\" Required=\"TRUE\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "SolicitadoPor",
+          "x": "<Field Type=\"User\" Name=\"SolicitadoPor\" StaticName=\"SolicitadoPor\" DisplayName=\"Solicitado por\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "EntregadoPor",
+          "x": "<Field Type=\"User\" Name=\"EntregadoPor\" StaticName=\"EntregadoPor\" DisplayName=\"Entregado por\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "UbicacionOrigen",
+          "x": "<Field Type=\"Text\" Name=\"UbicacionOrigen\" StaticName=\"UbicacionOrigen\" DisplayName=\"Ubicacion origen\" MaxLength=\"150\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "UbicacionDestino",
+          "x": "<Field Type=\"Text\" Name=\"UbicacionDestino\" StaticName=\"UbicacionDestino\" DisplayName=\"Ubicacion destino\" MaxLength=\"150\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "FechaCompromisoDevolucion",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaCompromisoDevolucion\" StaticName=\"FechaCompromisoDevolucion\" DisplayName=\"Compromiso de devolucion\" Indexed=\"TRUE\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "FechaDevolucionReal",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaDevolucionReal\" StaticName=\"FechaDevolucionReal\" DisplayName=\"Devolucion real\" Indexed=\"TRUE\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "ActaFirmada",
+          "x": "<Field Type=\"Boolean\" Name=\"ActaFirmada\" StaticName=\"ActaFirmada\" DisplayName=\"Acta firmada\"><Default>0</Default></Field>"
+        },
+        {
+          "l": "MovimientosCustodia",
+          "n": "Observaciones",
+          "x": "<Field Type=\"Note\" Name=\"Observaciones\" StaticName=\"Observaciones\" DisplayName=\"Observaciones\" NumLines=\"4\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "Alertas",
+          "n": "Contrato",
+          "x": "<Field Type=\"Lookup\" Name=\"Contrato\" StaticName=\"Contrato\" DisplayName=\"Contrato\" Indexed=\"TRUE\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Alertas",
+          "n": "TipoAlerta",
+          "x": "<Field Type=\"Choice\" Name=\"TipoAlerta\" StaticName=\"TipoAlerta\" DisplayName=\"Tipo de alerta\" Required=\"TRUE\"><CHOICES><CHOICE>Preaviso de vencimiento</CHOICE><CHOICE>Vencimiento</CHOICE><CHOICE>Renovacion automatica</CHOICE><CHOICE>Vencimiento de garantia</CHOICE><CHOICE>Prestamo vencido</CHOICE><CHOICE>Aprobacion pendiente</CHOICE><CHOICE>SLA vencido</CHOICE></CHOICES></Field>"
+        },
+        {
+          "l": "Alertas",
+          "n": "DiasAnticipacion",
+          "x": "<Field Type=\"Number\" Name=\"DiasAnticipacion\" StaticName=\"DiasAnticipacion\" DisplayName=\"Dias de anticipacion\" Decimals=\"0\" />"
+        },
+        {
+          "l": "Alertas",
+          "n": "FechaEnvio",
+          "x": "<Field Type=\"DateTime\" Name=\"FechaEnvio\" StaticName=\"FechaEnvio\" DisplayName=\"Fecha de envio\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "Alertas",
+          "n": "Destinatarios",
+          "x": "<Field Type=\"Text\" Name=\"Destinatarios\" StaticName=\"Destinatarios\" DisplayName=\"Destinatarios\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "Alertas",
+          "n": "Canal",
+          "x": "<Field Type=\"Choice\" Name=\"Canal\" StaticName=\"Canal\" DisplayName=\"Canal\"><CHOICES><CHOICE>Correo</CHOICE><CHOICE>Teams</CHOICE><CHOICE>Ambos</CHOICE></CHOICES><Default>Correo</Default></Field>"
+        },
+        {
+          "l": "Bitacora",
+          "n": "Contrato",
+          "x": "<Field Type=\"Lookup\" Name=\"Contrato\" StaticName=\"Contrato\" DisplayName=\"Contrato\" Indexed=\"TRUE\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "Bitacora",
+          "n": "Accion",
+          "x": "<Field Type=\"Text\" Name=\"Accion\" StaticName=\"Accion\" DisplayName=\"Accion\" MaxLength=\"100\" />"
+        },
+        {
+          "l": "Bitacora",
+          "n": "Usuario",
+          "x": "<Field Type=\"User\" Name=\"Usuario\" StaticName=\"Usuario\" DisplayName=\"Usuario\" UserSelectionMode=\"PeopleOnly\" />"
+        },
+        {
+          "l": "Bitacora",
+          "n": "Fecha",
+          "x": "<Field Type=\"DateTime\" Name=\"Fecha\" StaticName=\"Fecha\" DisplayName=\"Fecha\" Format=\"DateTime\" />"
+        },
+        {
+          "l": "Bitacora",
+          "n": "Detalle",
+          "x": "<Field Type=\"Note\" Name=\"Detalle\" StaticName=\"Detalle\" DisplayName=\"Detalle\" NumLines=\"4\" RichText=\"FALSE\" />"
+        },
+        {
+          "l": "ContratosCamposValor",
+          "n": "Contrato",
+          "x": "<Field Type=\"Lookup\" Name=\"Contrato\" StaticName=\"Contrato\" DisplayName=\"Contrato\" Required=\"TRUE\" Indexed=\"TRUE\" List=\"{__ID_CONTRATOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "ContratosCamposValor",
+          "n": "Campo",
+          "x": "<Field Type=\"Lookup\" Name=\"Campo\" StaticName=\"Campo\" DisplayName=\"Campo\" Required=\"TRUE\" Indexed=\"TRUE\" List=\"{__ID_CAMPOS__}\" ShowField=\"Title\" />"
+        },
+        {
+          "l": "ContratosCamposValor",
+          "n": "ValorTexto",
+          "x": "<Field Type=\"Text\" Name=\"ValorTexto\" StaticName=\"ValorTexto\" DisplayName=\"Valor texto\" MaxLength=\"255\" />"
+        },
+        {
+          "l": "ContratosCamposValor",
+          "n": "ValorNumero",
+          "x": "<Field Type=\"Number\" Name=\"ValorNumero\" StaticName=\"ValorNumero\" DisplayName=\"Valor numero\" Decimals=\"4\" />"
+        },
+        {
+          "l": "ContratosCamposValor",
+          "n": "ValorFecha",
+          "x": "<Field Type=\"DateTime\" Name=\"ValorFecha\" StaticName=\"ValorFecha\" DisplayName=\"Valor fecha\" Format=\"DateOnly\" />"
+        },
+        {
+          "l": "ContratosCamposValor",
+          "n": "ValorBooleano",
+          "x": "<Field Type=\"Boolean\" Name=\"ValorBooleano\" StaticName=\"ValorBooleano\" DisplayName=\"Valor booleano\" />"
+        }
+      ],
+      "runAfter": {
+        "Id_Campos": [
+          "Succeeded"
+        ]
+      },
+      "description": "Las 134 columnas con su Field XML. Los lookups traen un token que se reemplaza abajo por el Id real de la lista destino."
+    },
+    "Crear_las_columnas": {
+      "type": "Foreach",
+      "foreach": "@outputs('Los_campos')",
+      "actions": {
+        "Crear_columna": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@{triggerBody()['text']}",
+              "parameters/method": "POST",
+              "parameters/uri": "@{concat('_api/web/lists/getbytitle(''', items('Crear_las_columnas')['l'], ''')/fields/createfieldasxml')}",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose"
+              },
+              "parameters/body": {
+                "parameters": {
+                  "__metadata": {
+                    "type": "SP.XmlSchemaFieldCreationInformation"
+                  },
+                  "SchemaXml": "@replace(replace(replace(replace(items('Crear_las_columnas')['x'],'__ID_AREAS__',body('Id_Areas')['d']['Id']),'__ID_CATEGORIAS__',body('Id_Categorias')['d']['Id']),'__ID_CONTRATOS__',body('Id_Contratos')['d']['Id']),'__ID_CAMPOS__',body('Id_Campos')['d']['Id'])",
+                  "Options": 8
+                }
+              }
+            }
+          },
+          "runAfter": {}
+        }
+      },
+      "runAfter": {
+        "Los_campos": [
+          "Succeeded"
+        ]
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "description": "Secuencial a proposito: en paralelo SharePoint rechaza creaciones simultaneas de columnas sobre la misma lista."
+    }
+  },
+  "outputs": {}
+}
