@@ -308,7 +308,7 @@ Screens:
                   Text: =ThisItem.Title
                   X: =12
                   Y: =8
-                  Width: =Parent.TemplateWidth * 0.3
+                  Width: =Parent.TemplateWidth * 0.22
                   Height: =24
                   Size: =gblTema.FuenteBase
                   FontWeight: =FontWeight.Semibold
@@ -554,9 +554,9 @@ Screens:
                   SearchFields: =["DisplayName"]
                   SelectMultiple: =false
                   DefaultSelectedItems: =Table(ThisItem.Responsable)
-                  X: =Parent.TemplateWidth * 0.33
+                  X: =Parent.TemplateWidth * 0.25
                   Y: =14
-                  Width: =Parent.TemplateWidth * 0.3
+                  Width: =Parent.TemplateWidth * 0.23
                   Height: =36
                   OnChange: |-
                     =Patch(Areas, LookUp(Areas, ID = ThisItem.ID), {Responsable: cmbAreaResponsable.Selected});
@@ -570,12 +570,31 @@ Screens:
                   SearchFields: =["DisplayName"]
                   SelectMultiple: =false
                   DefaultSelectedItems: =Table(ThisItem.Gerente)
-                  X: =Parent.TemplateWidth * 0.65
+                  X: =Parent.TemplateWidth * 0.50
                   Y: =14
-                  Width: =Parent.TemplateWidth * 0.3
+                  Width: =Parent.TemplateWidth * 0.23
                   Height: =36
                   OnChange: |-
                     =Patch(Areas, LookUp(Areas, ID = ThisItem.ID), {Gerente: cmbAreaGerente.Selected});
+                    ClearCollect(colAreasAdmin, Areas)
+            # Tercera figura que varia por area, igual que Responsable y Gerente:
+            # la matriz dice el rol y el flujo lo resuelve contra el area del
+            # contrato. Agregar un area nueva no obliga a tocar ninguna regla.
+            - cmbAreaVicepresidente:
+                Control: Classic/ComboBox
+                Properties:
+                  Items: |-
+                    =Office365Users.SearchUser({searchTerm: cmbAreaVicepresidente.SearchText, top: 20})
+                  DisplayFields: =["DisplayName"]
+                  SearchFields: =["DisplayName"]
+                  SelectMultiple: =false
+                  DefaultSelectedItems: =Table(ThisItem.Vicepresidente)
+                  X: =Parent.TemplateWidth * 0.75
+                  Y: =14
+                  Width: =Parent.TemplateWidth * 0.23
+                  Height: =36
+                  OnChange: |-
+                    =Patch(Areas, LookUp(Areas, ID = ThisItem.ID), {Vicepresidente: cmbAreaVicepresidente.Selected});
                     ClearCollect(colAreasAdmin, Areas)
 
       # --- Sección Categorías (carpetas y esquema dinámico) --------------------

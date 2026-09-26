@@ -308,3 +308,42 @@ SortByColumns(colAreasAdmin, "Title", SortOrder.Ascending)
 
 `cmbResponsable.Items` / `cmbGerente.Items`:
 `Office365Users.SearchUser({searchTerm: Self.SearchText, top: 20})`
+
+---
+
+## Qué se mantiene desde aquí, y qué no
+
+La pantalla cubre las cinco cosas que cambian con el negocio, para no depender
+de abrir SharePoint:
+
+| Sección | Qué se edita |
+|---|---|
+| Áreas | Responsable, Gerente y Vicepresidente de cada área |
+| Matriz de aprobación | Tramos de monto, niveles, roles, aprobadores, activar y desactivar reglas |
+| Parámetros | Tipos de cambio, días de preaviso, correos, interruptor de DocuSign |
+| Categorías | Carpetas, color, orden, responsable adicional |
+| Campos y cláusulas | El esquema que se pide en cada categoría |
+| Simulador | Qué ruta saldría para un monto y un tipo dados |
+
+### El límite: dato contra estructura
+
+Lo que la pantalla edita son **filas**. Lo que no puede cambiar son las
+**columnas y los catálogos**, porque de eso dependen las fórmulas y los flujos.
+
+| Se hace desde la app | Hace falta tocar el esquema |
+|---|---|
+| Cambiar quién es el Gerente de un área | Inventar un **rol nuevo** de aprobador |
+| Agregar un área, con sus tres personas | Agregar un **tipo de contrato** al catálogo |
+| Mover el tramo de 375.000 a otro monto | Agregar un **estado** a la máquina de estados |
+| Agregar un nivel a una regla | Agregar una **columna** a la ficha del contrato |
+| Crear una categoría y sus campos | |
+
+La regla para distinguirlos: **si el valor sale de una lista desplegable fija,
+es estructura**. Un rol nuevo, por ejemplo, necesita tres cambios coordinados:
+la opción en `RolAprobador`, la columna de persona en `Areas` si varía por
+área, y la rama correspondiente en la resolución del aprobador del flujo 01.
+Fue exactamente lo que hizo falta para agregar `Vicepresidencia de area`.
+
+Es una frontera deliberada, no una carencia: el día que alguien renombre un rol
+desde una pantalla, los flujos dejan de encontrarlo y los contratos se detienen
+sin error visible.
