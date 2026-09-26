@@ -617,13 +617,33 @@ Las cuatro fallan en silencio si están mal.
 
 | Comprobación | Cómo | Si falla |
 |---|---|---|
-| Los nombres internos | Abre 3-4 columnas desde *Configuración de la lista* y mira `&Field=` en la URL | Aparece `_x0020_` → recrea esa columna con el nombre sin espacios |
+| Los nombres internos | Con la URL de abajo, todos de golpe | Aparece `_x0020_` → recrea esa columna con el nombre sin espacios |
 | Las listas están completas | Cuenta: deben ser **13 listas + 1 biblioteca** | Falta alguna → revisa el orden de la sección B |
 | Los valores de Elección | Compara letra por letra con el catálogo de `02-modelo-datos.md` | Un acento distinto → el flujo no encuentra la regla |
 | La matriz resuelve | Simulador de la demo web, o crea un contrato de prueba de S/ 25 000 | 0 niveles → revisa los tramos `MontoDesde`/`MontoHasta` |
 
 El error más caro es el primero, porque no da ningún síntoma hasta que la app
 muestra campos vacíos sin explicar por qué.
+
+### Ver todos los nombres internos de una vez
+
+No hace falta abrir columna por columna ni tener consola. Pega esto en la barra
+de direcciones, con sesión ya iniciada, cambiando el sitio y la lista:
+
+```
+https://TU-TENANT.sharepoint.com/sites/Contratos/_api/web/lists/getbytitle('Contratos')/fields?$select=InternalName&$filter=Hidden eq false
+```
+
+El navegador muestra la respuesta como texto. Busca con Ctrl+F un par de
+nombres que sepas que deben estar —`NombreContrato`, `MontoPEN`,
+`EstadoCustodia`— y comprueba que aparecen tal cual.
+
+**La señal de alarma es `_x0020_`.** Si algún nombre lo lleva, esa columna se
+creó desde la interfaz en vez de por la API, y las fórmulas no la van a
+encontrar.
+
+Funciona igual en tablet: es una dirección web, no una herramienta de
+desarrollador.
 
 ---
 
