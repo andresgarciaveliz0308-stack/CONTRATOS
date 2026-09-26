@@ -21,8 +21,18 @@ mismo pegándolo en la consola.
 1. [make.powerautomate.com](https://make.powerautomate.com) → **Mis flujos**
 2. **Importar → Paquete de importación (heredado)**
 3. Sube `power-automate/build/90-crear-listas.zip`
-4. En *Configuración relacionada*, asigna tu conexión de **SharePoint**
-5. **Importar**, y abre el flujo
+4. En **Related resources**, la fila *SharePoint* sale **en rojo** con
+   *«Select during import»*. Toca la **llave inglesa** 🔧 de esa fila, elige tu
+   conexión de SharePoint y **Guardar**.
+5. Recién ahí se habilita **Import**.
+
+> **El botón Import está gris hasta que la fila de la conexión pasa de rojo a
+> verde.** Es el paso que más confunde: el paquete ya subió bien, pero Power
+> Automate no importa nada mientras falte asignar la conexión.
+>
+> Si en la lista no aparece ninguna conexión de SharePoint, créala primero en
+> **Conexiones → + Nueva conexión → SharePoint**, y vuelve a empezar la
+> importación.
 
 ## Ejecutarlo
 
