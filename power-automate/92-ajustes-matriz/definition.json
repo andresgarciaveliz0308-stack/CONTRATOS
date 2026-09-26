@@ -1,0 +1,317 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Adapta la matriz de aprobacion a la estructura real y deja el sitio listo para probar con una sola persona.",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    }
+  },
+  "triggers": {
+    "Ejecutar_manualmente": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "title": "URL del sitio de SharePoint",
+              "x-ms-dynamically-added": true
+            },
+            "text_1": {
+              "type": "string",
+              "title": "Correo de la persona de prueba",
+              "description": "Queda como responsable, gerente, vicepresidente y aprobador",
+              "x-ms-dynamically-added": true
+            }
+          },
+          "required": [
+            "text",
+            "text_1"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Columna_vicepresidente": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "POST",
+          "parameters/uri": "_api/web/lists/getbytitle('Areas')/fields/createfieldasxml",
+          "parameters/headers": {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose"
+          },
+          "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"SchemaXml\": \"<Field Type=\\\"User\\\" Name=\\\"Vicepresidente\\\" StaticName=\\\"Vicepresidente\\\" DisplayName=\\\"Vicepresidente\\\" UserSelectionMode=\\\"PeopleOnly\\\" />\", \"Options\": 8}}"
+        }
+      },
+      "runAfter": {}
+    },
+    "Roles_de_la_matriz": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "POST",
+          "parameters/uri": "_api/web/lists/getbytitle('MatrizAprobacion')/fields/getbytitle('RolAprobador')",
+          "parameters/headers": {
+            "Accept": "application/json;odata=verbose",
+            "Content-Type": "application/json;odata=verbose",
+            "X-HTTP-Method": "MERGE",
+            "IF-MATCH": "*"
+          },
+          "parameters/body": "{\"__metadata\": {\"type\": \"SP.FieldChoice\"}, \"Choices\": {\"results\": [\"Jefe de area\", \"Gerente de area\", \"Vicepresidencia de area\", \"Legal\", \"Finanzas\", \"Compras\", \"Gerencia General\", \"Directorio\", \"Usuario especifico\"]}}"
+        }
+      },
+      "runAfter": {
+        "Columna_vicepresidente": [
+          "Succeeded",
+          "Failed"
+        ]
+      }
+    },
+    "Asegurar_usuario": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "POST",
+          "parameters/uri": "_api/web/ensureuser",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          },
+          "parameters/body": "@{json(concat('{\"logonName\":\"i:0#.f|membership|', triggerBody()['text_1'], '\"}'))}"
+        }
+      },
+      "runAfter": {
+        "Roles_de_la_matriz": [
+          "Succeeded",
+          "Failed"
+        ]
+      }
+    },
+    "Obtener_area": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('Areas')/items?$select=Id&$top=1",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        }
+      },
+      "runAfter": {
+        "Asegurar_usuario": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Personas_del_area": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "POST",
+          "parameters/uri": "@{concat('_api/web/lists/getbytitle(''Areas'')/items(', first(body('Obtener_area')['value'])['Id'], ')')}",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata",
+            "X-HTTP-Method": "MERGE",
+            "IF-MATCH": "*"
+          },
+          "parameters/body": "@{json(concat('{\"ResponsableId\":', string(body('Asegurar_usuario')['Id']), ',\"GerenteId\":', string(body('Asegurar_usuario')['Id']), ',\"VicepresidenteId\":', string(body('Asegurar_usuario')['Id']), '}'))}"
+        }
+      },
+      "runAfter": {
+        "Obtener_area": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Reglas_actuales": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "connectionName": "shared_sharepointonline",
+          "operationId": "HttpRequest",
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+        },
+        "parameters": {
+          "dataset": "@{triggerBody()['text']}",
+          "parameters/method": "GET",
+          "parameters/uri": "_api/web/lists/getbytitle('MatrizAprobacion')/items?$select=Id&$top=500",
+          "parameters/headers": {
+            "Accept": "application/json;odata=nometadata",
+            "Content-Type": "application/json;odata=nometadata"
+          }
+        }
+      },
+      "runAfter": {
+        "Personas_del_area": [
+          "Succeeded",
+          "Failed"
+        ]
+      }
+    },
+    "Desactivar_las_anteriores": {
+      "type": "Foreach",
+      "foreach": "@body('Reglas_actuales')['value']",
+      "actions": {
+        "Desactivar": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@{triggerBody()['text']}",
+              "parameters/method": "POST",
+              "parameters/uri": "@{concat('_api/web/lists/getbytitle(''MatrizAprobacion'')/items(', items('Desactivar_las_anteriores')['Id'], ')')}",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata",
+                "X-HTTP-Method": "MERGE",
+                "IF-MATCH": "*"
+              },
+              "parameters/body": "{\"Activo\": false}"
+            }
+          },
+          "runAfter": {}
+        },
+        "Siguiente_desactivada": {
+          "type": "Compose",
+          "inputs": "@item()['Id']",
+          "runAfter": {
+            "Desactivar": [
+              "Succeeded",
+              "Failed"
+            ]
+          }
+        }
+      },
+      "runAfter": {
+        "Reglas_actuales": [
+          "Succeeded"
+        ]
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "description": "Se desactivan, no se borran: la matriz tiene la columna Activo justamente para poder volver atras."
+    },
+    "Las_reglas": {
+      "type": "Compose",
+      "inputs": [
+        "{\"Title\": \"0-20k - N1 Gerente de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 0, \"MontoHastaPEN\": 20000, \"Nivel\": 1, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}",
+        "{\"Title\": \"20k-100k - N1 Gerente de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 20000, \"MontoHastaPEN\": 100000, \"Nivel\": 1, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}",
+        "{\"Title\": \"20k-100k - N2 Legal\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 20000, \"MontoHastaPEN\": 100000, \"Nivel\": 2, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true, \"AprobadorUsuarioId\": __USUARIO__}",
+        "{\"Title\": \"100k-375k - N1 Gerente de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 375000, \"Nivel\": 1, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}",
+        "{\"Title\": \"100k-375k - N2 Legal\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 375000, \"Nivel\": 2, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true, \"AprobadorUsuarioId\": __USUARIO__}",
+        "{\"Title\": \"100k-375k - N3 Gerencia General\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 375000, \"Nivel\": 3, \"RolAprobador\": \"Gerencia General\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true, \"AprobadorUsuarioId\": __USUARIO__}",
+        "{\"Title\": \"375k+ - N1 Gerente de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 375000, \"MontoHastaPEN\": 999999999, \"Nivel\": 1, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}",
+        "{\"Title\": \"375k+ - N2 Legal\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 375000, \"MontoHastaPEN\": 999999999, \"Nivel\": 2, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true, \"AprobadorUsuarioId\": __USUARIO__}",
+        "{\"Title\": \"375k+ - N3 Gerencia General\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 375000, \"MontoHastaPEN\": 999999999, \"Nivel\": 3, \"RolAprobador\": \"Gerencia General\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true, \"AprobadorUsuarioId\": __USUARIO__}",
+        "{\"Title\": \"375k+ - N4 Vicepresidencia de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 375000, \"MontoHastaPEN\": 999999999, \"Nivel\": 4, \"RolAprobador\": \"Vicepresidencia de area\", \"Obligatorio\": true, \"SLAHoras\": 120, \"Activo\": true}",
+        "{\"Title\": \"NDA - N1 Legal\", \"TipoContrato\": \"Confidencialidad (NDA)\", \"MontoDesdePEN\": 0, \"MontoHastaPEN\": 999999999, \"Nivel\": 1, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true, \"AprobadorUsuarioId\": __USUARIO__}"
+      ],
+      "runAfter": {
+        "Desactivar_las_anteriores": [
+          "Succeeded",
+          "Failed"
+        ]
+      },
+      "description": "Generado: no editar a mano."
+    },
+    "Crear_las_reglas": {
+      "type": "Foreach",
+      "foreach": "@outputs('Las_reglas')",
+      "actions": {
+        "Crear_regla": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@{triggerBody()['text']}",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists/getbytitle('MatrizAprobacion')/items",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "@replace(items('Crear_las_reglas'), '__USUARIO__', string(body('Asegurar_usuario')['Id']))"
+            }
+          },
+          "runAfter": {}
+        },
+        "Siguiente_regla": {
+          "type": "Compose",
+          "inputs": "@item()",
+          "runAfter": {
+            "Crear_regla": [
+              "Succeeded",
+              "Failed"
+            ]
+          }
+        }
+      },
+      "runAfter": {
+        "Las_reglas": [
+          "Succeeded"
+        ]
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

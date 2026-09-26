@@ -262,6 +262,11 @@
         },
         {
           "l": "Areas",
+          "n": "Vicepresidente",
+          "b": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"SchemaXml\": \"<Field Type=\\\"User\\\" Name=\\\"Vicepresidente\\\" StaticName=\\\"Vicepresidente\\\" DisplayName=\\\"Vicepresidente\\\" UserSelectionMode=\\\"PeopleOnly\\\" />\", \"Options\": 8}}"
+        },
+        {
+          "l": "Areas",
           "n": "CentroCosto",
           "b": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"SchemaXml\": \"<Field Type=\\\"Text\\\" Name=\\\"CentroCosto\\\" StaticName=\\\"CentroCosto\\\" DisplayName=\\\"Centro de costo\\\" MaxLength=\\\"50\\\" />\", \"Options\": 8}}"
         },
@@ -648,7 +653,7 @@
         {
           "l": "MatrizAprobacion",
           "n": "RolAprobador",
-          "b": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"SchemaXml\": \"<Field Type=\\\"Choice\\\" Name=\\\"RolAprobador\\\" StaticName=\\\"RolAprobador\\\" DisplayName=\\\"Rol del aprobador\\\" Required=\\\"TRUE\\\"><CHOICES><CHOICE>Jefe de area</CHOICE><CHOICE>Gerente de area</CHOICE><CHOICE>Legal</CHOICE><CHOICE>Finanzas</CHOICE><CHOICE>Compras</CHOICE><CHOICE>Gerencia General</CHOICE><CHOICE>Directorio</CHOICE><CHOICE>Usuario especifico</CHOICE></CHOICES></Field>\", \"Options\": 8}}"
+          "b": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"SchemaXml\": \"<Field Type=\\\"Choice\\\" Name=\\\"RolAprobador\\\" StaticName=\\\"RolAprobador\\\" DisplayName=\\\"Rol del aprobador\\\" Required=\\\"TRUE\\\"><CHOICES><CHOICE>Jefe de area</CHOICE><CHOICE>Gerente de area</CHOICE><CHOICE>Vicepresidencia de area</CHOICE><CHOICE>Legal</CHOICE><CHOICE>Finanzas</CHOICE><CHOICE>Compras</CHOICE><CHOICE>Gerencia General</CHOICE><CHOICE>Directorio</CHOICE><CHOICE>Usuario especifico</CHOICE></CHOICES></Field>\", \"Options\": 8}}"
         },
         {
           "l": "MatrizAprobacion",

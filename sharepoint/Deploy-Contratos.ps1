@@ -330,8 +330,12 @@ $lstAreas = New-ListaSiNoExiste -Title 'Areas' -Url 'Lists/Areas' `
 
 @(
     @{ Name = 'CodigoArea';  Display = 'Codigo';          Type = 'Text';    MaxLength = 20; AddToView = $true }
-    @{ Name = 'Responsable'; Display = 'Responsable';     Type = 'User';    AddToView = $true }
-    @{ Name = 'Gerente';     Display = 'Gerente';         Type = 'User';    AddToView = $true }
+    @{ Name = 'Responsable';    Display = 'Responsable';    Type = 'User'; AddToView = $true }
+    @{ Name = 'Gerente';        Display = 'Gerente';        Type = 'User'; AddToView = $true }
+    # Los tres roles que varian segun el area del contrato salen de aqui, no de
+    # la matriz: la matriz dice "Gerente de area" y el flujo busca el del area
+    # que corresponda. Por eso agregar un area nueva no obliga a tocar reglas.
+    @{ Name = 'Vicepresidente'; Display = 'Vicepresidente'; Type = 'User'; AddToView = $true }
     @{ Name = 'CentroCosto'; Display = 'Centro de costo'; Type = 'Text';    MaxLength = 50 }
     @{ Name = 'Activo';      Display = 'Activo';          Type = 'Boolean'; Default = 1; AddToView = $true }
 ) | ForEach-Object { Add-Columna -Lista $lstAreas -Definicion $_ }
@@ -527,7 +531,7 @@ Set-PnPField -List 'MatrizAprobacion' -Identity 'Title' -Values @{ Title = 'Regl
     @{ Name = 'MontoDesdePEN';    Display = 'Monto desde (PEN)';Type = 'Number'; Decimals = 2; Default = 0; Required = $true; AddToView = $true }
     @{ Name = 'MontoHastaPEN';    Display = 'Monto hasta (PEN)';Type = 'Number'; Decimals = 2; Required = $true; AddToView = $true }
     @{ Name = 'Nivel';            Display = 'Nivel';            Type = 'Number'; Decimals = 0; Required = $true; AddToView = $true }
-    @{ Name = 'RolAprobador';     Display = 'Rol del aprobador';Type = 'Choice'; Choices = @('Jefe de area','Gerente de area','Legal','Finanzas','Compras','Gerencia General','Directorio','Usuario especifico'); Required = $true; AddToView = $true }
+    @{ Name = 'RolAprobador';     Display = 'Rol del aprobador';Type = 'Choice'; Choices = @('Jefe de area','Gerente de area','Vicepresidencia de area','Legal','Finanzas','Compras','Gerencia General','Directorio','Usuario especifico'); Required = $true; AddToView = $true }
     @{ Name = 'AprobadorUsuario'; Display = 'Aprobador (usuario)'; Type = 'User'; AddToView = $true }
     @{ Name = 'AprobadorGrupo';   Display = 'Aprobador (grupo)';   Type = 'Text'; MaxLength = 255 }
     @{ Name = 'Obligatorio';      Display = 'Obligatorio';         Type = 'Boolean'; Default = 1 }

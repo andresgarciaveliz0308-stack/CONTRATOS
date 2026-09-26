@@ -52,6 +52,10 @@
     "xml": "<Field Type=\"User\" Name=\"Gerente\" StaticName=\"Gerente\" DisplayName=\"Gerente\" UserSelectionMode=\"PeopleOnly\" />"
    },
    {
+    "n": "Vicepresidente",
+    "xml": "<Field Type=\"User\" Name=\"Vicepresidente\" StaticName=\"Vicepresidente\" DisplayName=\"Vicepresidente\" UserSelectionMode=\"PeopleOnly\" />"
+   },
+   {
     "n": "CentroCosto",
     "xml": "<Field Type=\"Text\" Name=\"CentroCosto\" StaticName=\"CentroCosto\" DisplayName=\"Centro de costo\" MaxLength=\"50\" />"
    },
@@ -427,7 +431,7 @@
    },
    {
     "n": "RolAprobador",
-    "xml": "<Field Type=\"Choice\" Name=\"RolAprobador\" StaticName=\"RolAprobador\" DisplayName=\"Rol del aprobador\" Required=\"TRUE\"><CHOICES><CHOICE>Jefe de area</CHOICE><CHOICE>Gerente de area</CHOICE><CHOICE>Legal</CHOICE><CHOICE>Finanzas</CHOICE><CHOICE>Compras</CHOICE><CHOICE>Gerencia General</CHOICE><CHOICE>Directorio</CHOICE><CHOICE>Usuario especifico</CHOICE></CHOICES></Field>"
+    "xml": "<Field Type=\"Choice\" Name=\"RolAprobador\" StaticName=\"RolAprobador\" DisplayName=\"Rol del aprobador\" Required=\"TRUE\"><CHOICES><CHOICE>Jefe de area</CHOICE><CHOICE>Gerente de area</CHOICE><CHOICE>Vicepresidencia de area</CHOICE><CHOICE>Legal</CHOICE><CHOICE>Finanzas</CHOICE><CHOICE>Compras</CHOICE><CHOICE>Gerencia General</CHOICE><CHOICE>Directorio</CHOICE><CHOICE>Usuario especifico</CHOICE></CHOICES></Field>"
    },
    {
     "n": "AprobadorUsuario",
