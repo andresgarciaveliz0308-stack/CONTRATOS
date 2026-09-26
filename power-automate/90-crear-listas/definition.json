@@ -118,6 +118,16 @@
             }
           },
           "runAfter": {}
+        },
+        "Siguiente_lista": {
+          "type": "Compose",
+          "inputs": "@concat('procesado: ', string(item()))",
+          "runAfter": {
+            "Crear_lista": [
+              "Succeeded",
+              "Failed"
+            ]
+          }
         }
       },
       "runAfter": {
@@ -130,7 +140,7 @@
           "repetitions": 1
         }
       },
-      "description": "Una lista que ya existe hace fallar su iteracion. Es esperado: la accion siguiente corre igual y solo se crea lo que falta."
+      "description": "Lo que ya existe falla su iteracion y se absorbe, para que el bucle siga con el resto. Ver la nota sobre 'tolerar'."
     },
     "Id_Areas": {
       "type": "OpenApiConnection",
@@ -937,6 +947,16 @@
             }
           },
           "runAfter": {}
+        },
+        "Siguiente_columna": {
+          "type": "Compose",
+          "inputs": "@concat('procesado: ', string(item()))",
+          "runAfter": {
+            "Crear_columna": [
+              "Succeeded",
+              "Failed"
+            ]
+          }
         }
       },
       "runAfter": {
@@ -949,7 +969,7 @@
           "repetitions": 1
         }
       },
-      "description": "Secuencial a proposito: en paralelo SharePoint rechaza creaciones simultaneas de columnas sobre la misma lista."
+      "description": "Secuencial a proposito: en paralelo SharePoint rechaza creaciones simultaneas de columnas sobre la misma lista. Los fallos por columna ya existente se absorben."
     }
   },
   "outputs": {}

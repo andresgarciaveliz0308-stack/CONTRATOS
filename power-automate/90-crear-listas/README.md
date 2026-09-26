@@ -68,11 +68,18 @@ volver a ejecutar: no se pierde nada de lo ya creado.
 
 ## Volver a ejecutarlo es seguro
 
-Las listas y columnas que ya existen hacen fallar **su** iteración, no el flujo:
-la siguiente acción corre igual porque su `runAfter` acepta `Failed`. En el
-historial verás iteraciones en rojo con *"already exists"* — es lo esperado.
+Lo que ya existe falla su llamada, y ese fallo **se absorbe**: dentro de cada
+bucle, la acción HTTP va seguida de un `Compose` cuyo `runAfter` acepta
+`Failed`, de modo que la iteración termina bien y el bucle sigue con la
+siguiente.
 
-Lo que importa al terminar es que no haya errores **distintos** de ese.
+> **Por qué hace falta.** Una iteración cuya última acción falla **aborta el
+> resto del bucle**. Sin ese `Compose`, encontrar una sola lista ya existente
+> detenía la creación de todas las demás.
+
+En el historial verás en rojo las llamadas de lo que ya existía, con
+*"already exists"*. Es lo esperado. Lo que importa es que no haya errores
+**distintos** de ese.
 
 ---
 

@@ -141,6 +141,20 @@ def http(nombre, metodo, uri, cuerpo=None, run_after=None):
     return nombre, a
 
 
+def tolerar(accion, que):
+    """Absorbe el fallo de una iteracion para que el bucle siga.
+
+    Una iteracion cuya ultima accion falla aborta el resto del Foreach. Como
+    'ya existe' es un fallo esperado y normal aqui, se encadena un Compose que
+    acepta Failed: la iteracion termina en verde y el bucle continua. El error
+    real sigue visible en rojo dentro del historial, en la accion HTTP.
+    """
+    return {f"Siguiente_{que}": {
+        "type": "Compose",
+        "inputs": f"@concat('procesado: ', string(item()))",
+        "runAfter": {accion: ["Succeeded", "Failed"]}}}
+
+
 acciones = {}
 
 acciones["Las_listas"] = {
@@ -152,11 +166,11 @@ n, a = http("Crear_lista", "POST", "_api/web/lists",
             "@items('Crear_las_listas')['b']")
 acciones["Crear_las_listas"] = {
     "type": "Foreach", "foreach": "@outputs('Las_listas')",
-    "actions": {n: a},
+    "actions": {n: a, **tolerar(n, "lista")},
     "runAfter": {"Las_listas": ["Succeeded"]},
     "runtimeConfiguration": {"concurrency": {"repetitions": 1}},
-    "description": "Una lista que ya existe hace fallar su iteracion. Es esperado: "
-                   "la accion siguiente corre igual y solo se crea lo que falta."}
+    "description": "Lo que ya existe falla su iteracion y se absorbe, para que "
+                   "el bucle siga con el resto. Ver la nota sobre 'tolerar'."}
 
 anterior = "Crear_las_listas"
 for lista, clave in [("Areas", "Id_Areas"), ("Categorias", "Id_Categorias"),
@@ -188,11 +202,12 @@ n, a = http("Crear_columna", "POST",
             "@" + cuerpo_expr)
 acciones["Crear_las_columnas"] = {
     "type": "Foreach", "foreach": "@outputs('Los_campos')",
-    "actions": {n: a},
+    "actions": {n: a, **tolerar(n, "columna")},
     "runAfter": {"Los_campos": ["Succeeded"]},
     "runtimeConfiguration": {"concurrency": {"repetitions": 1}},
     "description": "Secuencial a proposito: en paralelo SharePoint rechaza "
-                   "creaciones simultaneas de columnas sobre la misma lista."}
+                   "creaciones simultaneas de columnas sobre la misma lista. "
+                   "Los fallos por columna ya existente se absorben."}
 
 definicion = {
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
