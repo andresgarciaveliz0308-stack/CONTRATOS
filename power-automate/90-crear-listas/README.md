@@ -81,11 +81,36 @@ creaciones simultáneas de columnas sobre la misma lista.
 | `Los_campos` | Las 134 columnas con su Field XML |
 | `Crear_las_columnas` | `POST …/fields/createfieldasxml` con `Options=8` |
 
+## La estructura del paquete
+
+Microsoft no documenta este formato. Está calcado de un paquete realmente
+exportado desde Power Automate:
+
+```
+manifest.json
+Microsoft.Flow/flows/manifest.json
+Microsoft.Flow/flows/<flowId>/apisMap.json
+Microsoft.Flow/flows/<flowId>/connectionsMap.json
+Microsoft.Flow/flows/<flowId>/definition.json
+```
+
+Una primera versión dedujo la estructura y falló con `MissingPackageManifest`.
+Faltaban tres archivos, y el más importante no era el que nombraba el error:
+el `manifest.json` de la raíz declara **tres** recursos, no dos. Además del
+flujo y del conector (`Microsoft.PowerApps/apis`) hace falta uno de tipo
+`Microsoft.PowerApps/apis/connections` — **es la fila que se asigna al
+importar**. Sin él, *Related resources* aparece vacío y no hay dónde elegir la
+conexión. Los dos `*Map.json` son los que enlazan el flujo con esos recursos.
+
+El `metadata` que traen los paquetes exportados lleva identificadores del
+tenant y del usuario que exportó. Es estado del entorno, no estructura: aquí se
+omite a propósito.
+
 ## Si la importación falla
 
-El formato de paquete no está garantizado por Microsoft. Son 8 acciones: se
-arma a mano en el diseñador siguiendo la tabla de arriba, con
-`definition.json` de esta carpeta como referencia de las expresiones exactas.
+Son 8 acciones: se arma a mano en el diseñador siguiendo la tabla de arriba,
+con `definition.json` de esta carpeta como referencia de las expresiones
+exactas.
 
 ## Verificación
 

@@ -213,10 +213,17 @@ SALIDA.mkdir(parents=True, exist_ok=True)
     json.dumps(definicion, ensure_ascii=False, indent=2), encoding="utf-8")
 
 # --------------------------------------------------------------- paquete .zip
+# La estructura esta calcada de un paquete exportado por Power Automate. Un
+# intento previo la dedujo y fallo con MissingPackageManifest: faltaban
+# Microsoft.Flow/flows/manifest.json, los dos mapas por flujo, y sobre todo el
+# recurso de tipo apis/connections, que es la fila que se asigna al importar
+# (sin el, "Related resources" sale vacio).
 NOMBRE = "Contratos - Crear listas y columnas"
+CONECTOR = "shared_sharepointonline"
 flow_id = str(uuid.uuid4())
-conn_id = str(uuid.uuid4())
-ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
+api_id = str(uuid.uuid4())      # el conector
+conn_id = str(uuid.uuid4())     # la conexion concreta, que el usuario elige
+ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f0Z")
 
 manifiesto = {
     "schema": "1.0",
@@ -224,21 +231,26 @@ manifiesto = {
                 "description": "Sistema de Contratos - aprovisionamiento de listas",
                 "createdTime": ahora,
                 "packageTelemetryId": str(uuid.uuid4()),
-                "creator": "generar-flujo-listas", "sourceEnvironment": ""},
+                "creator": "N/A", "sourceEnvironment": ""},
     "resources": {
-        conn_id: {"id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
-                  "name": "shared_sharepointonline",
-                  "type": "Microsoft.PowerApps/apis",
-                  "suggestedCreationType": "Existing", "creationType": "Existing",
-                  "details": {"displayName": "SharePoint",
-                              "type": "Microsoft.PowerApps/apis"},
-                  "configurableBy": "System", "hierarchy": "Child", "dependsOn": []},
-        flow_id: {"id": None, "name": flow_id, "type": "Microsoft.Flow/flows",
+        flow_id: {"type": "Microsoft.Flow/flows",
                   "suggestedCreationType": "New",
-                  "creationType": "New, Existing, Update",
+                  "creationType": "Existing, New, Update",
                   "details": {"displayName": NOMBRE},
                   "configurableBy": "User", "hierarchy": "Root",
-                  "dependsOn": [conn_id]},
+                  "dependsOn": [api_id, conn_id]},
+        api_id: {"id": f"/providers/Microsoft.PowerApps/apis/{CONECTOR}",
+                 "name": CONECTOR,
+                 "type": "Microsoft.PowerApps/apis",
+                 "suggestedCreationType": "Existing",
+                 "details": {"displayName": "SharePoint"},
+                 "configurableBy": "System", "hierarchy": "Child", "dependsOn": []},
+        conn_id: {"type": "Microsoft.PowerApps/apis/connections",
+                  "suggestedCreationType": "Existing",
+                  "creationType": "Existing",
+                  "details": {"displayName": "SharePoint"},
+                  "configurableBy": "User", "hierarchy": "Child",
+                  "dependsOn": [api_id]},
     },
 }
 
@@ -247,18 +259,25 @@ def_flujo = {
     "type": "Microsoft.Flow/flows",
     "properties": {"apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
                    "displayName": NOMBRE, "definition": definicion,
-                   "connectionReferences": {"shared_sharepointonline": {
-                       "connectionName": "shared_sharepointonline", "source": "Embedded",
-                       "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
-                       "tier": "NotSpecified"}}},
-    "schemaVersion": "1.0.0.0",
+                   "connectionReferences": {CONECTOR: {
+                       "connectionName": CONECTOR, "source": "Embedded",
+                       "id": f"/providers/Microsoft.PowerApps/apis/{CONECTOR}",
+                       "tier": "NotSpecified", "apiName": "sharepointonline",
+                       "isProcessSimpleApiReferenceConversionAlreadyDone": False}},
+                   "flowFailureAlertSubscribed": False,
+                   "isManaged": False},
 }
 
 BUILD.mkdir(parents=True, exist_ok=True)
 zip_path = BUILD / "90-crear-listas.zip"
+base = f"Microsoft.Flow/flows/{flow_id}"
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr("manifest.json", json.dumps(manifiesto, ensure_ascii=False, indent=2))
-    z.writestr(f"Microsoft.Flow/flows/{flow_id}/definition.json",
+    z.writestr("Microsoft.Flow/flows/manifest.json", json.dumps(
+        {"packageSchemaVersion": "1.0", "flowAssets": {"assetPaths": [flow_id]}}))
+    z.writestr(f"{base}/apisMap.json", json.dumps({CONECTOR: api_id}))
+    z.writestr(f"{base}/connectionsMap.json", json.dumps({CONECTOR: conn_id}))
+    z.writestr(f"{base}/definition.json",
                json.dumps(def_flujo, ensure_ascii=False, indent=2))
 
 print(f"definicion : {SALIDA / 'definition.json'}")
