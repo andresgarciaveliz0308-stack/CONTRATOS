@@ -92,17 +92,36 @@ DESC = {
     "ContratosCamposValor": "Valores del esquema dinamico (EAV).",
 }
 
+# El campo Body de "Enviar una solicitud HTTP a SharePoint" es TEXTO. Si se le
+# pasa un objeto, el motor lo serializa y las expresiones pierden el tipo:
+# BaseTemplate llega como "100" y SharePoint responde
+#   "No se puede convertir un valor primitivo en el tipo esperado 'Edm.Int32'".
+# Por eso el cuerpo se arma entero aqui, ya serializado, y el flujo solo lo pasa
+# tal cual. Numeros y booleanos quedan literales en el texto.
 listas, campos = [], []
 for l in esquema["listas"]:
-    e = {"t": l["nombre"], "p": 101 if l["es_biblioteca"] else 100,
-         "d": DESC.get(l["nombre"], "")}
-    if l["nombre"] in ("Contratos", "DocumentosContratos"):
-        e["v"] = True
+    cuerpo = {"__metadata": {"type": "SP.List"},
+              "Title": l["nombre"],
+              "BaseTemplate": 101 if l["es_biblioteca"] else 100,
+              "Description": DESC.get(l["nombre"], ""),
+              "AllowContentTypes": False,
+              "ContentTypesEnabled": False,
+              "EnableVersioning": l["nombre"] in ("Contratos", "DocumentosContratos")}
     if l["es_biblioteca"]:
-        e["mv"] = True
-    listas.append(e)
+        cuerpo["EnableMinorVersions"] = True
+    listas.append({"t": l["nombre"],
+                   "b": json.dumps(cuerpo, ensure_ascii=False)})
+
     for c in l["columnas"]:
-        campos.append({"l": l["nombre"], "n": c["name"], "x": field_xml(c)})
+        # El XML va dentro del JSON, escapado por json.dumps. Los lookups traen
+        # un token que se sustituye en ejecucion; es alfanumerico, asi que
+        # reemplazarlo dentro de la cadena ya escapada es seguro.
+        cuerpo_c = {"parameters": {
+            "__metadata": {"type": "SP.XmlSchemaFieldCreationInformation"},
+            "SchemaXml": field_xml(c),
+            "Options": 8}}
+        campos.append({"l": l["nombre"], "n": c["name"],
+                       "b": json.dumps(cuerpo_c, ensure_ascii=False)})
 
 SITIO = "@{triggerBody()['text']}"
 
@@ -128,20 +147,9 @@ acciones["Las_listas"] = {
     "type": "Compose", "inputs": listas, "runAfter": {},
     "description": "Las 13 listas. Generado desde Deploy-Contratos.ps1: no editar a mano."}
 
-# El cuerpo va como objeto JSON real, no como texto concatenado: el motor lo
-# serializa y escapa por nosotros. Concatenar romperia el Field XML, que viene
-# lleno de comillas. Ojo con la diferencia entre "@expr" y "@{expr}": el primero
-# conserva el tipo (numero, booleano), el segundo lo convierte en texto.
-n, a = http("Crear_lista", "POST", "_api/web/lists", {
-    "__metadata": {"type": "SP.List"},
-    "Title": "@items('Crear_las_listas')['t']",
-    "BaseTemplate": "@items('Crear_las_listas')['p']",
-    "Description": "@items('Crear_las_listas')['d']",
-    "AllowContentTypes": False,
-    "ContentTypesEnabled": False,
-    "EnableVersioning": "@coalesce(items('Crear_las_listas')?['v'], false)",
-    "EnableMinorVersions": "@coalesce(items('Crear_las_listas')?['mv'], false)",
-})
+# El cuerpo ya viene serializado desde 'Las_listas': aqui solo se pasa.
+n, a = http("Crear_lista", "POST", "_api/web/lists",
+            "@items('Crear_las_listas')['b']")
 acciones["Crear_las_listas"] = {
     "type": "Foreach", "foreach": "@outputs('Las_listas')",
     "actions": {n: a},
@@ -165,21 +173,19 @@ acciones["Los_campos"] = {
     "description": "Las 134 columnas con su Field XML. Los lookups traen un token "
                    "que se reemplaza abajo por el Id real de la lista destino."}
 
-# Options = 8 (AddFieldInternalNameHint): sin esto SharePoint descarta el nombre
-# interno del XML y usa el visible, que es el fallo que todo esto evita.
-xml_expr = ("replace(replace(replace(replace(items('Crear_las_columnas')['x'],"
-            "'__ID_AREAS__',body('Id_Areas')['d']['Id']),"
-            "'__ID_CATEGORIAS__',body('Id_Categorias')['d']['Id']),"
-            "'__ID_CONTRATOS__',body('Id_Contratos')['d']['Id']),"
-            "'__ID_CAMPOS__',body('Id_Campos')['d']['Id'])")
+# El cuerpo ya trae Options=8 (AddFieldInternalNameHint): sin eso SharePoint
+# descarta el nombre interno del XML y usa el visible, que es el fallo que todo
+# esto evita. Aqui solo se sustituyen los cuatro tokens de lookup por el Id real.
+cuerpo_expr = ("replace(replace(replace(replace(items('Crear_las_columnas')['b'],"
+               "'__ID_AREAS__',body('Id_Areas')['d']['Id']),"
+               "'__ID_CATEGORIAS__',body('Id_Categorias')['d']['Id']),"
+               "'__ID_CONTRATOS__',body('Id_Contratos')['d']['Id']),"
+               "'__ID_CAMPOS__',body('Id_Campos')['d']['Id'])")
 
 n, a = http("Crear_columna", "POST",
             "@{concat('_api/web/lists/getbytitle(''', items('Crear_las_columnas')['l'], "
             "''')/fields/createfieldasxml')}",
-            {"parameters": {
-                "__metadata": {"type": "SP.XmlSchemaFieldCreationInformation"},
-                "SchemaXml": "@" + xml_expr,
-                "Options": 8}})
+            "@" + cuerpo_expr)
 acciones["Crear_las_columnas"] = {
     "type": "Foreach", "foreach": "@outputs('Los_campos')",
     "actions": {n: a},

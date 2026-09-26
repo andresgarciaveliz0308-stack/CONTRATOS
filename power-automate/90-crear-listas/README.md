@@ -61,14 +61,20 @@ descarta el nombre interno del XML y usa el visible, generando
 `Nombre_x0020_del_x0020_contrato`. Es la razón de ser de todo el flujo: es lo
 que garantiza que las fórmulas encuentren sus columnas.
 
-**Los cuerpos van como objeto JSON, no como texto concatenado.** El Field XML
-está lleno de comillas; construirlo con `concat` y `string()` produce JSON
-inválido, porque `string()` no escapa nada. Pasándolo como objeto, el motor
-serializa y escapa por nosotros.
+**El cuerpo se arma completo al generar el flujo y viaja como texto.** El campo
+*Body* de esta acción **es texto**. Si se le pasa un objeto, el motor lo
+serializa y las expresiones de dentro pierden el tipo: `BaseTemplate` sale como
+`"100"` y SharePoint responde
 
-**`"@expr"` y no `"@{expr}"` donde importa el tipo.** El primero conserva el
-tipo; el segundo convierte a texto. `BaseTemplate` debe llegar como número y
-`EnableVersioning` como booleano.
+```
+No se puede convertir un valor primitivo en el tipo esperado 'Edm.Int32'
+```
+
+Por eso `Las_listas` y `Los_campos` ya traen cada cuerpo serializado, con los
+números y booleanos literales. El flujo solo los pasa. Tampoco sirve
+concatenarlos con `concat` y `string()`: el Field XML está lleno de comillas y
+`string()` no escapa nada, así que produciría JSON inválido en las 134
+columnas.
 
 **Los lookups no pueden llevar el GUID de antemano.** El `List` de un campo de
 búsqueda exige el GUID de la lista destino, que no existe hasta haberla creado.
