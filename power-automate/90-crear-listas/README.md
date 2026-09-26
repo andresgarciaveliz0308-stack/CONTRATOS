@@ -44,6 +44,28 @@ mismo pegándolo en la consola.
 > ejecútalo ahí y comprueba un par de nombres internos antes de hacerlo en el
 > definitivo.
 
+## Cómo saber si está avanzando
+
+La pantalla de ejecución **no se refresca sola**: los círculos azules siguen
+ahí aunque el flujo ya haya terminado. No la mires para medir progreso.
+
+**La comprobación real está en SharePoint:** abre el sitio →
+**Contenido del sitio**. Las listas van apareciendo a medida que se crean. Si
+en dos refrescos seguidos hay más que antes, está avanzando.
+
+Para el estado oficial: **Mis flujos → el flujo → Historial de ejecuciones**.
+Ahí dice *En ejecución*, *Correcto* o *Error*, y se actualiza al recargar.
+
+Tiempos esperables, con concurrencia 1:
+
+| Fase | Llamadas | Aprox. |
+|---|---|---|
+| Las 13 listas | 13 | menos de 1 min |
+| Las 134 columnas | 134 | 3 a 5 min |
+
+Si pasan más de 10 minutos sin que aparezcan listas nuevas, **Cancelar** y
+volver a ejecutar: no se pierde nada de lo ya creado.
+
 ## Volver a ejecutarlo es seguro
 
 Las listas y columnas que ya existen hacen fallar **su** iteración, no el flujo:
