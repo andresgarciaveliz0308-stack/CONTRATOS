@@ -1,0 +1,282 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "description": "Carga los datos iniciales del sistema de Contratos: parametros, categorias, clausulas y matriz de aprobacion.",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    }
+  },
+  "triggers": {
+    "Ejecutar_manualmente": {
+      "type": "Request",
+      "kind": "Button",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "title": "URL del sitio de SharePoint",
+              "description": "https://TU-TENANT.sharepoint.com/sites/Contratos",
+              "x-ms-dynamically-added": true
+            },
+            "text_1": {
+              "type": "string",
+              "title": "Tu correo de administrador",
+              "description": "Queda en ADMINS, CUSTODIOS y LEGAL",
+              "x-ms-dynamically-added": true
+            }
+          },
+          "required": [
+            "text",
+            "text_1"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Las_filas": {
+      "type": "Compose",
+      "inputs": [
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"MONEDA_BASE\", \"Valor\": \"PEN\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"TC_USD\", \"Valor\": \"3.75\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"TC_EUR\", \"Valor\": \"4.05\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"DIAS_PREAVISO_DEFAULT\", \"Valor\": \"30\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"DIAS_ALERTA_ESCALONADA\", \"Valor\": \"90,60,30,15,7,1\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"SLA_APROBACION_HORAS\", \"Valor\": \"48\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"DOCUSIGN_HABILITADO\", \"Valor\": \"false\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"RETENCION_ANIOS\", \"Valor\": \"10\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"PREFIJO_CODIGO\", \"Valor\": \"CTR\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"CORREO_LEGAL\", \"Valor\": \"__CORREO__\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"CORREO_ADMIN_CONTRATOS\", \"Valor\": \"__CORREO__\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"ADMINS\", \"Valor\": \"__CORREO__\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"CUSTODIOS\", \"Valor\": \"__CORREO__\"}"
+        },
+        {
+          "l": "Parametros",
+          "b": "{\"Title\": \"LEGAL\", \"Valor\": \"__CORREO__\"}"
+        },
+        {
+          "l": "Categorias",
+          "b": "{\"Title\": \"Logistica\", \"Color\": \"#a8692b\", \"Orden\": 1, \"Activo\": true}"
+        },
+        {
+          "l": "Categorias",
+          "b": "{\"Title\": \"Comercial\", \"Color\": \"#ff9906\", \"Orden\": 2, \"Activo\": true}"
+        },
+        {
+          "l": "Categorias",
+          "b": "{\"Title\": \"Administrativo\", \"Color\": \"#681029\", \"Orden\": 3, \"Activo\": true}"
+        },
+        {
+          "l": "Categorias",
+          "b": "{\"Title\": \"Recursos Humanos\", \"Color\": \"#375623\", \"Orden\": 4, \"Activo\": true}"
+        },
+        {
+          "l": "Categorias",
+          "b": "{\"Title\": \"Legal\", \"Color\": \"#4e0c1f\", \"Orden\": 5, \"Activo\": true}"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "b": "{\"Title\": \"ClausulaProteccionDatos\", \"Etiqueta\": \"Incluye clausula de proteccion de datos\", \"TipoDato\": \"Booleano\", \"Seccion\": \"Clausulas corporativas\", \"Obligatorio\": false, \"Orden\": 1, \"Activo\": true}"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "b": "{\"Title\": \"ClausulaAntisoborno\", \"Etiqueta\": \"Incluye clausula antisoborno y anticorrupcion\", \"TipoDato\": \"Booleano\", \"Seccion\": \"Clausulas corporativas\", \"Obligatorio\": false, \"Orden\": 2, \"Activo\": true}"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "b": "{\"Title\": \"ClausulaSalida\", \"Etiqueta\": \"Incluye clausula de salida / resolucion anticipada\", \"TipoDato\": \"Booleano\", \"Seccion\": \"Clausulas corporativas\", \"Obligatorio\": false, \"Orden\": 3, \"Activo\": true}"
+        },
+        {
+          "l": "CamposPersonalizados",
+          "b": "{\"Title\": \"ClausulaConfidencialidad\", \"Etiqueta\": \"Incluye clausula de confidencialidad\", \"TipoDato\": \"Booleano\", \"Seccion\": \"Clausulas corporativas\", \"Obligatorio\": false, \"Orden\": 4, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 0-20k - N1 Jefe de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 0, \"MontoHastaPEN\": 20000, \"Nivel\": 1, \"RolAprobador\": \"Jefe de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 20k-100k - N1 Jefe de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 20000, \"MontoHastaPEN\": 100000, \"Nivel\": 1, \"RolAprobador\": \"Jefe de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 20k-100k - N2 Gerente de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 20000, \"MontoHastaPEN\": 100000, \"Nivel\": 2, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 20k-100k - N3 Legal\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 20000, \"MontoHastaPEN\": 100000, \"Nivel\": 3, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 100k-500k - N1 Jefe de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 500000, \"Nivel\": 1, \"RolAprobador\": \"Jefe de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 100k-500k - N2 Gerente de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 500000, \"Nivel\": 2, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 100k-500k - N3 Legal\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 500000, \"Nivel\": 3, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 100k-500k - N4 Finanzas\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 500000, \"Nivel\": 4, \"RolAprobador\": \"Finanzas\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 100k-500k - N5 Gerencia General\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 100000, \"MontoHastaPEN\": 500000, \"Nivel\": 5, \"RolAprobador\": \"Gerencia General\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 500k+ - N1 Jefe de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 500000, \"MontoHastaPEN\": 999999999, \"Nivel\": 1, \"RolAprobador\": \"Jefe de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 500k+ - N2 Gerente de area\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 500000, \"MontoHastaPEN\": 999999999, \"Nivel\": 2, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 500k+ - N3 Legal\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 500000, \"MontoHastaPEN\": 999999999, \"Nivel\": 3, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 500k+ - N4 Finanzas\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 500000, \"MontoHastaPEN\": 999999999, \"Nivel\": 4, \"RolAprobador\": \"Finanzas\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 500k+ - N5 Gerencia General\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 500000, \"MontoHastaPEN\": 999999999, \"Nivel\": 5, \"RolAprobador\": \"Gerencia General\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Todos 500k+ - N6 Directorio\", \"TipoContrato\": \"Todos\", \"MontoDesdePEN\": 500000, \"MontoHastaPEN\": 999999999, \"Nivel\": 6, \"RolAprobador\": \"Directorio\", \"Obligatorio\": true, \"SLAHoras\": 120, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"NDA - N1 Legal\", \"TipoContrato\": \"Confidencialidad (NDA)\", \"MontoDesdePEN\": 0, \"MontoHastaPEN\": 999999999, \"Nivel\": 1, \"RolAprobador\": \"Legal\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Laboral - N1 Jefe de area\", \"TipoContrato\": \"Laboral\", \"MontoDesdePEN\": 0, \"MontoHastaPEN\": 999999999, \"Nivel\": 1, \"RolAprobador\": \"Jefe de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Laboral - N2 Gerente de area\", \"TipoContrato\": \"Laboral\", \"MontoDesdePEN\": 0, \"MontoHastaPEN\": 999999999, \"Nivel\": 2, \"RolAprobador\": \"Gerente de area\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Laboral - N3 Gerencia General\", \"TipoContrato\": \"Laboral\", \"MontoDesdePEN\": 0, \"MontoHastaPEN\": 999999999, \"Nivel\": 3, \"RolAprobador\": \"Gerencia General\", \"Obligatorio\": true, \"SLAHoras\": 72, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Suministro de bienes - N2 Compras\", \"TipoContrato\": \"Suministro de bienes\", \"MontoDesdePEN\": 20000, \"MontoHastaPEN\": 999999999, \"Nivel\": 2, \"RolAprobador\": \"Compras\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "MatrizAprobacion",
+          "b": "{\"Title\": \"Obra - N2 Compras\", \"TipoContrato\": \"Obra\", \"MontoDesdePEN\": 20000, \"MontoHastaPEN\": 999999999, \"Nivel\": 2, \"RolAprobador\": \"Compras\", \"Obligatorio\": true, \"SLAHoras\": 48, \"Activo\": true}"
+        },
+        {
+          "l": "Areas",
+          "b": "{\"Title\": \"General\", \"CodigoArea\": \"GEN\", \"Activo\": true}"
+        }
+      ],
+      "runAfter": {},
+      "description": "45 filas ya serializadas. Generado: no editar a mano."
+    },
+    "Cargar_las_filas": {
+      "type": "Foreach",
+      "foreach": "@outputs('Las_filas')",
+      "actions": {
+        "Crear_fila": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@{triggerBody()['text']}",
+              "parameters/method": "POST",
+              "parameters/uri": "@{concat('_api/web/lists/getbytitle(''', items('Cargar_las_filas')['l'], ''')/items')}",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata",
+                "Content-Type": "application/json;odata=nometadata"
+              },
+              "parameters/body": "@replace(items('Cargar_las_filas')['b'], '__CORREO__', triggerBody()['text_1'])"
+            }
+          },
+          "runAfter": {}
+        },
+        "Siguiente": {
+          "type": "Compose",
+          "inputs": "@concat('procesada: ', string(item()))",
+          "runAfter": {
+            "Crear_fila": [
+              "Succeeded",
+              "Failed"
+            ]
+          }
+        }
+      },
+      "runAfter": {
+        "Las_filas": [
+          "Succeeded"
+        ]
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "description": "Una fila que falla no detiene el resto: el Compose de cierre acepta Failed. Repetir el flujo duplicaria filas, asi que se ejecuta una sola vez."
+    }
+  },
+  "outputs": {}
+}
